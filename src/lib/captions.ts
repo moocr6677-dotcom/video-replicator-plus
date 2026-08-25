@@ -10,7 +10,7 @@ export type Segment = {
   ar: string;
 };
 
-/** Splits a transcript chunk into sentences and spreads timings by text length. */
+/** Splits a pause-aligned transcript chunk and estimates timing by spoken words. */
 export function segmentsFromChunk(text: string, start: number, duration: number, idOffset: number): Segment[] {
   const parts = text
     .replace(/\s+/g, " ")
@@ -22,10 +22,11 @@ export function segmentsFromChunk(text: string, start: number, duration: number,
 
   if (parts.length === 0) return [];
 
-  const totalChars = parts.reduce((sum, p) => sum + p.length, 0);
+  const weights = parts.map((part) => Math.max(1, part.split(/\s+/).length));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   let cursor = start;
   return parts.map((sentence, index) => {
-    const span = (sentence.length / totalChars) * duration;
+    const span = ((weights[index] ?? 1) / totalWeight) * duration;
     const segment: Segment = {
       id: idOffset + index,
       start: cursor,

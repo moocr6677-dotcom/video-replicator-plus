@@ -61,7 +61,7 @@ function Index() {
 
       try {
         setPhase("audio");
-        const { chunks, duration } = await extractAudioChunks(file, 45, (r) => setProgress(r * 0.2));
+        const { chunks, duration } = await extractAudioChunks(file, 18, (r) => setProgress(r * 0.2));
         if (duration > MAX_SECONDS) {
           throw new Error("الفيديو أطول من 10 دقائق. جرّب فيديو أقصر.");
         }

@@ -59,10 +59,18 @@ export function layoutBlocks(ctx: CanvasRenderingContext2D, segments: Segment[])
   });
 }
 
+const MAX_VIDEO_H = 470;
+
 export function videoRect(videoAspect: number) {
-  const w = FRAME_W - 40;
-  const h = Math.round(w / (videoAspect || 16 / 9));
-  return { x: 20, y: 24, w, h };
+  const aspect = videoAspect || 16 / 9;
+  const maxW = FRAME_W - 40;
+  let w = maxW;
+  let h = Math.round(w / aspect);
+  if (h > MAX_VIDEO_H) {
+    h = MAX_VIDEO_H;
+    w = Math.round(h * aspect);
+  }
+  return { x: Math.round((FRAME_W - w) / 2), y: 24, w, h };
 }
 
 export function transcriptTop(videoAspect: number) {

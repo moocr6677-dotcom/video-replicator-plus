@@ -10,6 +10,10 @@ export type AudioChunk = {
 };
 
 const TARGET_RATE = 16000;
+const ANALYSIS_FRAME_SECONDS = 0.02;
+const TARGET_CHUNK_SECONDS = 12;
+const MAX_CHUNK_SECONDS = 18;
+const EDGE_PADDING_SECONDS = 0.12;
 
 function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
@@ -49,12 +53,102 @@ function toBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function percentile(values: number[], ratio: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * ratio))] ?? 0;
+}
+
+/**
+ * Splits on real pauses instead of fixed clock boundaries. This keeps each
+ * transcript anchored to the moment speech starts and greatly reduces drift.
+ */
+function speechRanges(samples: Float32Array): Array<{ from: number; to: number }> {
+  const frameSize = Math.round(TARGET_RATE * ANALYSIS_FRAME_SECONDS);
+  const levels: number[] = [];
+  for (let offset = 0; offset < samples.length; offset += frameSize) {
+    let energy = 0;
+    const end = Math.min(offset + frameSize, samples.length);
+    for (let i = offset; i < end; i++) {
+      const value = samples[i] ?? 0;
+      energy += value * value;
+    }
+    levels.push(Math.sqrt(energy / Math.max(1, end - offset)));
+  }
+
+  const threshold = Math.min(0.04, Math.max(0.006, percentile(levels, 0.2) * 3.5));
+  const active = levels.map((level) => level >= threshold);
+  const bridgeFrames = Math.round(0.3 / ANALYSIS_FRAME_SECONDS);
+  const minimumSpeechFrames = Math.round(0.16 / ANALYSIS_FRAME_SECONDS);
+
+  // Short quiet gaps inside a word or sentence are not useful cut points.
+  let quietStart = -1;
+  for (let i = 0; i <= active.length; i++) {
+    if (i < active.length && !active[i]) {
+      if (quietStart < 0) quietStart = i;
+    } else if (quietStart >= 0) {
+      if (i - quietStart <= bridgeFrames) active.fill(true, quietStart, i);
+      quietStart = -1;
+    }
+  }
+
+  const utterances: Array<{ from: number; to: number }> = [];
+  let speechStart = -1;
+  for (let i = 0; i <= active.length; i++) {
+    if (i < active.length && active[i]) {
+      if (speechStart < 0) speechStart = i;
+    } else if (speechStart >= 0) {
+      if (i - speechStart >= minimumSpeechFrames) {
+        utterances.push({ from: speechStart * frameSize, to: Math.min(i * frameSize, samples.length) });
+      }
+      speechStart = -1;
+    }
+  }
+
+  const targetSamples = TARGET_CHUNK_SECONDS * TARGET_RATE;
+  const maxSamples = MAX_CHUNK_SECONDS * TARGET_RATE;
+  const padding = Math.round(EDGE_PADDING_SECONDS * TARGET_RATE);
+  const ranges: Array<{ from: number; to: number }> = [];
+
+  for (const utterance of utterances) {
+    let from = Math.max(0, utterance.from - padding);
+    const paddedTo = Math.min(samples.length, utterance.to + padding);
+    while (paddedTo - from > maxSamples) {
+      const target = from + targetSamples;
+      const searchRadius = 2 * TARGET_RATE;
+      let best = target;
+      let bestLevel = Number.POSITIVE_INFINITY;
+      const firstFrame = Math.max(0, Math.floor((target - searchRadius) / frameSize));
+      const lastFrame = Math.min(levels.length - 1, Math.ceil((target + searchRadius) / frameSize));
+      for (let frame = firstFrame; frame <= lastFrame; frame++) {
+        const level = levels[frame] ?? Number.POSITIVE_INFINITY;
+        if (level < bestLevel) {
+          bestLevel = level;
+          best = frame * frameSize;
+        }
+      }
+      ranges.push({ from, to: best });
+      from = best;
+    }
+
+    const previous = ranges[ranges.length - 1];
+    // Nearby utterances belong in one request, while preserving a short pause.
+    if (previous && from - previous.to < TARGET_RATE * 0.65 && paddedTo - previous.from <= maxSamples) {
+      previous.to = paddedTo;
+    } else {
+      ranges.push({ from, to: paddedTo });
+    }
+  }
+
+  return ranges;
+}
+
 /**
  * Decodes the media file's audio track and returns 16kHz mono WAV chunks.
  */
 export async function extractAudioChunks(
   file: File,
-  chunkSeconds = 45,
+  chunkSeconds = MAX_CHUNK_SECONDS,
   onProgress?: (ratio: number) => void,
 ): Promise<{ chunks: AudioChunk[]; duration: number }> {
   const arrayBuffer = await file.arrayBuffer();
@@ -80,14 +174,25 @@ export async function extractAudioChunks(
   const data = mono.getChannelData(0);
 
   const chunks: AudioChunk[] = [];
-  const samplesPerChunk = chunkSeconds * TARGET_RATE;
-  const total = Math.max(1, Math.ceil(data.length / samplesPerChunk));
-  for (let i = 0; i < total; i++) {
-    const slice = data.subarray(i * samplesPerChunk, Math.min((i + 1) * samplesPerChunk, data.length));
+  const detected = speechRanges(data);
+  // Keep the argument as a hard upper bound for callers that request smaller chunks.
+  const maxSamples = Math.max(TARGET_RATE, chunkSeconds * TARGET_RATE);
+  const ranges = detected.flatMap(({ from, to }) => {
+    const result: Array<{ from: number; to: number }> = [];
+    for (let cursor = from; cursor < to; cursor += maxSamples) {
+      result.push({ from: cursor, to: Math.min(cursor + maxSamples, to) });
+    }
+    return result;
+  });
+  const total = Math.max(1, ranges.length);
+  for (let i = 0; i < ranges.length; i++) {
+    const range = ranges[i];
+    if (!range) continue;
+    const slice = data.subarray(range.from, range.to);
     if (slice.length < TARGET_RATE * 0.2) continue;
     chunks.push({
       base64: toBase64(encodeWav(new Float32Array(slice), TARGET_RATE)),
-      start: (i * samplesPerChunk) / TARGET_RATE,
+      start: range.from / TARGET_RATE,
       duration: slice.length / TARGET_RATE,
     });
     onProgress?.((i + 1) / total);

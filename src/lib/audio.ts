@@ -64,6 +64,8 @@ export async function extractAudioChunks(
   let decoded: AudioBuffer;
   try {
     decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+  } catch {
+    throw new Error("تعذّر قراءة صوت هذا الملف. جرّب فيديو MP4 يحتوي على صوت، أو افتح الموقع من متصفح Chrome.");
   } finally {
     void decodeCtx.close();
   }

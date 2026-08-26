@@ -68,15 +68,29 @@ function Index() {
         if (chunks.length === 0) throw new Error("لم يتم العثور على صوت في هذا الفيديو.");
 
         setPhase("transcribe");
+        const texts = new Array<string>(chunks.length).fill("");
+        let done = 0;
+        let cursor = 0;
+        const CONCURRENCY = 2;
+        const worker = async () => {
+          while (cursor < chunks.length) {
+            const index = cursor++;
+            const chunk = chunks[index]!;
+            const { text } = await transcribe({ data: { base64: chunk.base64 } });
+            texts[index] = text ?? "";
+            done += 1;
+            setProgress(0.2 + (done / chunks.length) * 0.5);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
+
         const collected: Segment[] = [];
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i]!;
-          const { text } = await transcribe({ data: { base64: chunk.base64 } });
-          if (text) {
-            collected.push(...segmentsFromChunk(text, chunk.start, chunk.duration, collected.length));
-          }
-          setProgress(0.2 + ((i + 1) / chunks.length) * 0.5);
+          const text = texts[i];
+          if (text) collected.push(...segmentsFromChunk(text, chunk.start, chunk.duration, collected.length));
         }
+
         if (collected.length === 0) throw new Error("تعذّر استخراج النص من هذا الفيديو.");
 
         setVideoUrl(url);

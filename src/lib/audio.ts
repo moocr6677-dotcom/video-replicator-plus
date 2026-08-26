@@ -181,7 +181,13 @@ async function captureViaPlayback(
   try {
     await new Promise<void>((resolve, reject) => {
       media.onloadedmetadata = () => resolve();
-      media.onerror = () => reject(new Error("تعذّر تشغيل هذا الملف في المتصفح."));
+      media.onerror = () =>
+        reject(
+          new Error(
+            "تعذّر قراءة صوت هذا الملف في هذا المتصفح. جرّب فيديو MP4/WebM يحتوي على صوت، أو افتح الموقع من Chrome.",
+          ),
+        );
+
     });
 
     const ctx = new (getAudioCtor())();

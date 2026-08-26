@@ -1,4 +1,4 @@
-const GATEWAY = "https://api.groq.com/openai/v1";
+const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 const MAX_ATTEMPTS = 4;
 
 function wait(ms: number): Promise<void> {
@@ -28,10 +28,10 @@ function messageFromBody(body: string): string {
 async function terminalError(response: Response): Promise<never> {
   const body = await response.text().catch(() => "");
   const detail = messageFromBody(body).slice(0, 500);
-  if (response.status === 401) throw new Error("مفتاح Groq (GROQ_API_KEY) غير صالح أو غير مضبوط.");
-  if (response.status === 402) throw new Error(detail || "المفتاح غير مفعّل حاليًا.");
-  if (response.status === 403) throw new Error(detail || "الوصول مرفوض — تأكد من صلاحية مفتاح Groq.");
-  if (response.status === 404) throw new Error("الخدمة غير متاحة حاليًا.");
+  if (response.status === 401) throw new Error("إعداد خدمة الذكاء الاصطناعي غير صالح حاليًا.");
+  if (response.status === 402) throw new Error(detail || "رصيد الذكاء الاصطناعي غير كافٍ. أضف رصيدًا من إعدادات مساحة العمل.");
+  if (response.status === 403) throw new Error(detail || "الذكاء الاصطناعي غير مفعّل لمساحة العمل هذه.");
+  if (response.status === 404) throw new Error("خدمة التفريغ الصوتي غير متاحة لمساحة العمل هذه.");
   if (response.status === 429) throw new Error(detail || "الطلبات كثيرة حاليًا. انتظر قليلًا ثم حاول مرة أخرى.");
   throw new Error(detail || `فشل الطلب [${response.status}]`);
 }
@@ -58,11 +58,10 @@ function base64ToBytes(base64: string): ArrayBuffer {
   return buffer;
 }
 
-export async function requestTranscription(base64: string, key: string, prompt?: string): Promise<string> {
+export async function requestTranscription(base64: string, key: string): Promise<string> {
   const form = new FormData();
-  form.append("model", "whisper-large-v3-turbo");
+  form.append("model", "openai/gpt-4o-transcribe");
   form.append("file", new Blob([base64ToBytes(base64)], { type: "audio/wav" }), "chunk.wav");
-  if (prompt) form.append("prompt", prompt.slice(-800));
 
   const response = await fetchWithBackoff("/audio/transcriptions", {
     method: "POST",
@@ -78,7 +77,7 @@ export async function requestTranslations(lines: string[], key: string): Promise
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "openai/gpt-oss-120b",
+      model: "google/gemini-3.7-flash",
       response_format: { type: "json_object" },
       messages: [
         {

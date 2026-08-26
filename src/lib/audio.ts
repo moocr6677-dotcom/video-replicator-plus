@@ -13,7 +13,7 @@ const TARGET_RATE = 16000;
 const ANALYSIS_FRAME_SECONDS = 0.02;
 const TARGET_CHUNK_SECONDS = 12;
 const MAX_CHUNK_SECONDS = 18;
-const EDGE_PADDING_SECONDS = 0.25;
+const EDGE_PADDING_SECONDS = 0.12;
 
 function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
@@ -76,10 +76,10 @@ function speechRanges(samples: Float32Array): Array<{ from: number; to: number }
     levels.push(Math.sqrt(energy / Math.max(1, end - offset)));
   }
 
-  const threshold = Math.min(0.025, Math.max(0.006, percentile(levels, 0.2) * 2.2));
+  const threshold = Math.min(0.04, Math.max(0.006, percentile(levels, 0.2) * 3.5));
   const active = levels.map((level) => level >= threshold);
   const bridgeFrames = Math.round(0.3 / ANALYSIS_FRAME_SECONDS);
-  const minimumSpeechFrames = Math.round(0.08 / ANALYSIS_FRAME_SECONDS);
+  const minimumSpeechFrames = Math.round(0.16 / ANALYSIS_FRAME_SECONDS);
 
   // Short quiet gaps inside a word or sentence are not useful cut points.
   let quietStart = -1;
@@ -296,4 +296,4 @@ export async function extractAudioChunks(
   }
 
   return { chunks, duration };
-      }
+}

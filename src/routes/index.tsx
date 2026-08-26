@@ -71,15 +71,13 @@ function Index() {
         const texts = new Array<string>(chunks.length).fill("");
         let done = 0;
         let cursor = 0;
-        let context = "";
-        const CONCURRENCY = 1;
+        const CONCURRENCY = 2;
         const worker = async () => {
           while (cursor < chunks.length) {
             const index = cursor++;
             const chunk = chunks[index]!;
-            const { text } = await transcribe({ data: { base64: chunk.base64, prompt: context || undefined } });
+            const { text } = await transcribe({ data: { base64: chunk.base64 } });
             texts[index] = text ?? "";
-            if (text) context = text;
             done += 1;
             setProgress(0.2 + (done / chunks.length) * 0.5);
           }

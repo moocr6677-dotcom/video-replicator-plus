@@ -57,12 +57,12 @@ function base64ToBytes(base64: string): ArrayBuffer {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return buffer;
 }
+
 export async function requestTranscription(base64: string, key: string, prompt?: string): Promise<string> {
   const form = new FormData();
   form.append("model", "openai/gpt-4o-transcribe");
   form.append("file", new Blob([base64ToBytes(base64)], { type: "audio/wav" }), "chunk.wav");
   if (prompt) form.append("prompt", prompt.slice(-800));
-
 
   const response = await fetchWithBackoff("/audio/transcriptions", {
     method: "POST",

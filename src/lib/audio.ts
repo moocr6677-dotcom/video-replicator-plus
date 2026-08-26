@@ -143,6 +143,91 @@ function speechRanges(samples: Float32Array): Array<{ from: number; to: number }
   return ranges;
 }
 
+function getAudioCtor(): typeof AudioContext {
+  return (
+    window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  );
+}
+
+function resampleTo16k(input: Float32Array, sourceRate: number): Float32Array {
+  if (sourceRate === TARGET_RATE) return input;
+  const ratio = sourceRate / TARGET_RATE;
+  const output = new Float32Array(Math.floor(input.length / ratio));
+  for (let i = 0; i < output.length; i++) {
+    const position = i * ratio;
+    const index = Math.floor(position);
+    const next = Math.min(input.length - 1, index + 1);
+    const frac = position - index;
+    output[i] = (input[index] ?? 0) * (1 - frac) + (input[next] ?? 0) * frac;
+  }
+  return output;
+}
+
+/**
+ * Fallback for files the browser can play but cannot decode in one shot
+ * (large files, or codecs unsupported by decodeAudioData). Captures the audio
+ * graph while the media element plays back silently.
+ */
+async function captureViaPlayback(
+  file: File,
+  onProgress?: (ratio: number) => void,
+): Promise<{ data: Float32Array; duration: number }> {
+  const url = URL.createObjectURL(file);
+  const media = document.createElement("video");
+  media.src = url;
+  media.preload = "auto";
+  media.playsInline = true;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      media.onloadedmetadata = () => resolve();
+      media.onerror = () => reject(new Error("تعذّر تشغيل هذا الملف في المتصفح."));
+    });
+
+    const ctx = new (getAudioCtor())();
+    const source = ctx.createMediaElementSource(media);
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    const silence = ctx.createGain();
+    silence.gain.value = 0;
+    source.connect(processor);
+    processor.connect(silence);
+    silence.connect(ctx.destination);
+
+    const parts: Float32Array[] = [];
+    let captured = 0;
+    processor.onaudioprocess = (event) => {
+      const frame = event.inputBuffer.getChannelData(0);
+      parts.push(new Float32Array(frame));
+      captured += frame.length;
+      if (media.duration) onProgress?.(Math.min(1, captured / ctx.sampleRate / media.duration));
+    };
+
+    await ctx.resume();
+    await media.play();
+    await new Promise<void>((resolve) => {
+      media.onended = () => resolve();
+    });
+
+    processor.onaudioprocess = null;
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const merged = new Float32Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      merged.set(part, offset);
+      offset += part.length;
+    }
+    const rate = ctx.sampleRate;
+    const duration = Number.isFinite(media.duration) ? media.duration : total / rate;
+    void ctx.close();
+    if (total === 0) throw new Error("لم يتم العثور على صوت في هذا الفيديو.");
+    return { data: resampleTo16k(merged, rate), duration };
+  } finally {
+    media.pause();
+    media.removeAttribute("src");
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
  * Decodes the media file's audio track and returns 16kHz mono WAV chunks.
  */
@@ -151,27 +236,33 @@ export async function extractAudioChunks(
   chunkSeconds = MAX_CHUNK_SECONDS,
   onProgress?: (ratio: number) => void,
 ): Promise<{ chunks: AudioChunk[]; duration: number }> {
-  const arrayBuffer = await file.arrayBuffer();
-  const AudioCtor: typeof AudioContext =
-    window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const decodeCtx = new AudioCtor();
-  let decoded: AudioBuffer;
+  let data: Float32Array;
+  let duration: number;
+
   try {
-    decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+    const arrayBuffer = await file.arrayBuffer();
+    const decodeCtx = new (getAudioCtor())();
+    let decoded: AudioBuffer;
+    try {
+      decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+    } finally {
+      void decodeCtx.close();
+    }
+    duration = decoded.duration;
+    const offline = new OfflineAudioContext(1, Math.ceil(duration * TARGET_RATE), TARGET_RATE);
+    const source = offline.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offline.destination);
+    source.start();
+    data = (await offline.startRendering()).getChannelData(0);
+    onProgress?.(0.5);
   } catch {
-    throw new Error("تعذّر قراءة صوت هذا الملف. جرّب فيديو MP4 يحتوي على صوت، أو افتح الموقع من متصفح Chrome.");
-  } finally {
-    void decodeCtx.close();
+    // Real-time capture is slower but works with any file the browser can play.
+    const captured = await captureViaPlayback(file, (r) => onProgress?.(r * 0.9));
+    data = captured.data;
+    duration = captured.duration;
   }
 
-  const duration = decoded.duration;
-  const offline = new OfflineAudioContext(1, Math.ceil(duration * TARGET_RATE), TARGET_RATE);
-  const source = offline.createBufferSource();
-  source.buffer = decoded;
-  source.connect(offline.destination);
-  source.start();
-  const mono = await offline.startRendering();
-  const data = mono.getChannelData(0);
 
   const chunks: AudioChunk[] = [];
   const detected = speechRanges(data);

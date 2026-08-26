@@ -8,8 +8,8 @@ export const transcribeChunk = createServerFn({ method: "POST" })
     z.object({ base64: z.string().min(1), prompt: z.string().optional() }).parse(input),
   )
   .handler(async ({ data }) => {
-    const key = process.env["LOVABLE_API_KEY"];
-    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+    const key = process.env["GROQ_API_KEY"];
+    if (!key) throw new Error("Missing GROQ_API_KEY");
     return { text: await requestTranscription(data.base64, key, data.prompt) };
   });
 
@@ -17,7 +17,7 @@ export const transcribeChunk = createServerFn({ method: "POST" })
 export const translateBatch = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ lines: z.array(z.string()).min(1).max(60) }).parse(input))
   .handler(async ({ data }) => {
-    const key = process.env["LOVABLE_API_KEY"];
-    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+    const key = process.env["GROQ_API_KEY"];
+    if (!key) throw new Error("Missing GROQ_API_KEY");
     return { translations: await requestTranslations(data.lines, key) };
   });

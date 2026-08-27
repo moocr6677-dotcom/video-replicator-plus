@@ -33,7 +33,7 @@ function pickMimeType(): string {
   return "video/webm";
 }
 
-export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
+export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const blocksRef = useRef<Block[]>([]);

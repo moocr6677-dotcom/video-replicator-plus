@@ -215,7 +215,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
           don't decode frames on iOS/Safari, which produced a black canvas. */}
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={videoUrl ?? undefined}
         playsInline
         preload="auto"
         controls={false}

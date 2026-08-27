@@ -199,12 +199,15 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-[420px] px-3 pb-10">
+      {/* Kept in the layout (1px, transparent) instead of display:none — hidden videos
+          don't decode frames on iOS/Safari, which produced a black canvas. */}
       <video
         ref={videoRef}
         src={videoUrl}
         playsInline
-        crossOrigin="anonymous"
-        className="hidden"
+        preload="auto"
+        controls={false}
+        className="pointer-events-none absolute h-px w-px opacity-0"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => {
@@ -212,8 +215,24 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
           setTime(el.currentTime);
           if (recording && el.duration) setRecordProgress(el.currentTime / el.duration);
         }}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onDurationChange={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d)) setDuration(d);
+        }}
+        onLoadedMetadata={(e) => {
+          const el = e.currentTarget;
+          if (Number.isFinite(el.duration)) setDuration(el.duration);
+          setLoadError(null);
+          // Nudge the decoder so the first frame is painted on mobile.
+          if (el.currentTime === 0) el.currentTime = 0.01;
+        }}
+        onError={() =>
+          setLoadError("تعذّر تشغيل هذا الفيديو في المتصفح. جرّب ملف MP4 (H.264) أو افتح الموقع من Chrome.")
+        }
       />
+
+      {loadError ? <p className="mb-3 text-center text-sm text-destructive">{loadError}</p> : null}
+
 
       <canvas
         ref={canvasRef}

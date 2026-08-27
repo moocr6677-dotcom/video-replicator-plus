@@ -20,6 +20,15 @@ type Props = {
   onReset: () => void;
 };
 
+function normalizedVideoType(file: File): string {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".mp4") || name.endsWith(".m4v") || name.endsWith(".mov")) return "video/mp4";
+  if (name.endsWith(".webm")) return "video/webm";
+  if (type.startsWith("video/")) return type;
+  return "video/mp4";
+}
+
 function pickMimeType(): string {
   const candidates = [
     "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -51,10 +60,15 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
   const [attempt, setAttempt] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
-  // The blob URL is created only when the player mounts (after analysis finished),
-  // so long decoding work can't invalidate it. A failed load retries once.
+  // Some Android file pickers return MP4 files as application/octet-stream (or
+  // with an empty type). A blob URL preserves that wrong type and Chrome then
+  // reports MEDIA_ERR_SRC_NOT_SUPPORTED even when the bytes are valid MP4.
   useEffect(() => {
-    const url = URL.createObjectURL(videoFile);
+    const source =
+      attempt === 0
+        ? videoFile.slice(0, videoFile.size, normalizedVideoType(videoFile))
+        : videoFile;
+    const url = URL.createObjectURL(source);
     setVideoUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [videoFile, attempt]);
@@ -235,19 +249,26 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
           const el = e.currentTarget;
           if (Number.isFinite(el.duration)) setDuration(el.duration);
           setLoadError(null);
-          // Nudge the decoder so the first frame is painted on mobile.
-          if (el.currentTime === 0) el.currentTime = 0.01;
+        }}
+        onLoadedData={(e) => {
+          const el = e.currentTarget;
+          setLoadError(null);
+          // Seek only after the first frame is available; seeking during
+          // metadata loading can abort the source on some Android devices.
+          if (el.currentTime === 0 && el.duration > 0.01) el.currentTime = 0.01;
         }}
         onError={(e) => {
           const code = e.currentTarget.error?.code ?? 0;
-          // Network/decode hiccups on mobile: rebuild the blob URL once before giving up.
-          if (code !== 4 && attempt < 1) {
+          // Retry once with the untouched File. This covers both incorrect MIME
+          // metadata and transient blob-source failures on memory-constrained phones.
+          if (attempt < 1) {
+            setLoadError(null);
             setAttempt((n) => n + 1);
             return;
           }
           setLoadError(
             code === 4
-              ? "المتصفح لا يدعم ترميز هذا الفيديو. جرّب ملف MP4 (H.264 + AAC)."
+              ? "صيغة الفيديو الداخلية غير مدعومة في Chrome. حوّل الفيديو إلى MP4 بترميز H.264 ثم ارفعه مرة أخرى."
               : "تعذّر تحميل الفيديو. اضغط «فيديو جديد» وأعد المحاولة، أو افتح الموقع من Chrome.",
           );
         }}

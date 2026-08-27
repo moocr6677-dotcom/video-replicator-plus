@@ -47,6 +47,7 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
   const [duration, setDuration] = useState(0);
   const [recording, setRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Layout + render loop
   useEffect(() => {

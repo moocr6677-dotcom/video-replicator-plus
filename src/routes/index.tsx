@@ -38,26 +38,24 @@ function Index() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
 
   const transcribe = useServerFn(transcribeChunk);
   const translate = useServerFn(translateBatch);
 
   const reset = useCallback(() => {
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-    setVideoUrl(null);
+    setVideoFile(null);
     setSegments([]);
     setPhase("idle");
     setProgress(0);
     setError(null);
-  }, [videoUrl]);
+  }, []);
 
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
       setProgress(0);
-      const url = URL.createObjectURL(file);
 
       try {
         setPhase("audio");
@@ -93,7 +91,7 @@ function Index() {
 
         if (collected.length === 0) throw new Error("تعذّر استخراج النص من هذا الفيديو.");
 
-        setVideoUrl(url);
+        setVideoFile(file);
         setSegments(collected);
 
         setPhase("translate");
@@ -111,8 +109,7 @@ function Index() {
 
         setPhase("ready");
       } catch (err) {
-        URL.revokeObjectURL(url);
-        setVideoUrl(null);
+        setVideoFile(null);
         setPhase("idle");
         setError(err instanceof Error ? err.message : "حصل خطأ غير متوقع.");
       }
@@ -140,8 +137,8 @@ function Index() {
       </header>
 
       <section className="mt-6">
-        {phase === "ready" && videoUrl ? (
-          <CaptionPlayer videoUrl={videoUrl} segments={segments} onReset={reset} />
+        {phase === "ready" && videoFile ? (
+          <CaptionPlayer videoFile={videoFile} segments={segments} onReset={reset} />
         ) : (
           <div className="mx-auto max-w-[420px] px-4">
             <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">

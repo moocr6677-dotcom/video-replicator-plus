@@ -15,7 +15,7 @@ import {
 } from "@/lib/render-frame";
 
 type Props = {
-  videoUrl: string;
+  videoFile: File;
   segments: Segment[];
   onReset: () => void;
 };
@@ -33,7 +33,7 @@ function pickMimeType(): string {
   return "video/webm";
 }
 
-export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
+export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const blocksRef = useRef<Block[]>([]);
@@ -48,6 +48,17 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
   const [recording, setRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
+  // The blob URL is created only when the player mounts (after analysis finished),
+  // so long decoding work can't invalidate it. A failed load retries once.
+  useEffect(() => {
+    const url = URL.createObjectURL(videoFile);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [videoFile, attempt]);
+
 
   // Layout + render loop
   useEffect(() => {
@@ -204,7 +215,7 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
           don't decode frames on iOS/Safari, which produced a black canvas. */}
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={videoUrl ?? undefined}
         playsInline
         preload="auto"
         controls={false}
@@ -227,9 +238,19 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
           // Nudge the decoder so the first frame is painted on mobile.
           if (el.currentTime === 0) el.currentTime = 0.01;
         }}
-        onError={() =>
-          setLoadError("تعذّر تشغيل هذا الفيديو في المتصفح. جرّب ملف MP4 (H.264) أو افتح الموقع من Chrome.")
-        }
+        onError={(e) => {
+          const code = e.currentTarget.error?.code ?? 0;
+          // Network/decode hiccups on mobile: rebuild the blob URL once before giving up.
+          if (code !== 4 && attempt < 1) {
+            setAttempt((n) => n + 1);
+            return;
+          }
+          setLoadError(
+            code === 4
+              ? "المتصفح لا يدعم ترميز هذا الفيديو. جرّب ملف MP4 (H.264 + AAC)."
+              : "تعذّر تحميل الفيديو. اضغط «فيديو جديد» وأعد المحاولة، أو افتح الموقع من Chrome.",
+          );
+        }}
       />
 
       {loadError ? <p className="mb-3 text-center text-sm text-destructive">{loadError}</p> : null}

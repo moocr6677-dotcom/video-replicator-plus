@@ -203,6 +203,7 @@ export function CaptionPlayer({ videoUrl, segments, onReset }: Props) {
         ref={videoRef}
         src={videoUrl}
         playsInline
+        crossOrigin="anonymous"
         className="hidden"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}

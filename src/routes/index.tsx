@@ -38,7 +38,7 @@ function Index() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
 
   const transcribe = useServerFn(transcribeChunk);

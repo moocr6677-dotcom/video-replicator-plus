@@ -238,9 +238,19 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
           // Nudge the decoder so the first frame is painted on mobile.
           if (el.currentTime === 0) el.currentTime = 0.01;
         }}
-        onError={() =>
-          setLoadError("تعذّر تشغيل هذا الفيديو في المتصفح. جرّب ملف MP4 (H.264) أو افتح الموقع من Chrome.")
-        }
+        onError={(e) => {
+          const code = e.currentTarget.error?.code ?? 0;
+          // Network/decode hiccups on mobile: rebuild the blob URL once before giving up.
+          if (code !== 4 && attempt < 1) {
+            setAttempt((n) => n + 1);
+            return;
+          }
+          setLoadError(
+            code === 4
+              ? "المتصفح لا يدعم ترميز هذا الفيديو. جرّب ملف MP4 (H.264 + AAC)."
+              : "تعذّر تحميل الفيديو. اضغط «فيديو جديد» وأعد المحاولة، أو افتح الموقع من Chrome.",
+          );
+        }}
       />
 
       {loadError ? <p className="mb-3 text-center text-sm text-destructive">{loadError}</p> : null}

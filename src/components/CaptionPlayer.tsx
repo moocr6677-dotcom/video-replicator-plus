@@ -48,6 +48,17 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
   const [recording, setRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
+  // The blob URL is created only when the player mounts (after analysis finished),
+  // so long decoding work can't invalidate it. A failed load retries once.
+  useEffect(() => {
+    const url = URL.createObjectURL(videoFile);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [videoFile, attempt]);
+
 
   // Layout + render loop
   useEffect(() => {

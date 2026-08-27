@@ -15,7 +15,7 @@ import {
 } from "@/lib/render-frame";
 
 type Props = {
-  videoUrl: string;
+  videoFile: File;
   segments: Segment[];
   onReset: () => void;
 };

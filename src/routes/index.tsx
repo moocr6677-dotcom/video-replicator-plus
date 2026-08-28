@@ -3,10 +3,13 @@ import { useCallback, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { CaptionPlayer } from "@/components/CaptionPlayer";
 import { extractAudioChunks } from "@/lib/audio";
 import { segmentsFromChunk, type Segment } from "@/lib/captions";
+import { parseTranscript } from "@/lib/parse-transcript";
 import { transcribeChunk, translateBatch } from "@/lib/transcribe.functions";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -35,11 +38,15 @@ type Phase = "idle" | "audio" | "transcribe" | "translate" | "ready";
 
 function Index() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  const [manualText, setManualText] = useState("");
+  const [manualFile, setManualFile] = useState<File | null>(null);
 
   const transcribe = useServerFn(transcribeChunk);
   const translate = useServerFn(translateBatch);
@@ -50,7 +57,45 @@ function Index() {
     setPhase("idle");
     setProgress(0);
     setError(null);
+    setManualFile(null);
+    setManualText("");
   }, []);
+
+  const handleManual = useCallback(async () => {
+    setError(null);
+    if (!manualFile) {
+      setError("اختر ملف الفيديو أولًا.");
+      return;
+    }
+    const parsed = parseTranscript(manualText);
+    if (parsed.length === 0) {
+      setError("لم أتمكن من قراءة التوقيتات. استخدم صيغة SRT أو أسطر مثل: 00:12 النص هنا");
+      return;
+    }
+
+    setVideoFile(manualFile);
+    setSegments(parsed);
+    setPhase("translate");
+    setProgress(0);
+
+    try {
+      const BATCH = 25;
+      for (let i = 0; i < parsed.length; i += BATCH) {
+        const slice = parsed.slice(i, i + BATCH);
+        const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
+        translations.forEach((ar, index) => {
+          const target = parsed[i + index];
+          if (target) target.ar = ar;
+        });
+        setSegments([...parsed]);
+        setProgress(Math.min(1, (i + BATCH) / parsed.length));
+      }
+    } catch {
+      // Translation is optional here — the pasted transcript still plays.
+    }
+    setPhase("ready");
+  }, [manualFile, manualText, translate]);
+
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -141,7 +186,32 @@ function Index() {
           <CaptionPlayer videoFile={videoFile} segments={segments} onReset={reset} />
         ) : (
           <div className="mx-auto max-w-[420px] px-4">
-            <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+            {!busy ? (
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
+                <Button
+                  variant={mode === "auto" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => {
+                    setMode("auto");
+                    setError(null);
+                  }}
+                >
+                  استخراج تلقائي
+                </Button>
+                <Button
+                  variant={mode === "manual" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => {
+                    setMode("manual");
+                    setError(null);
+                  }}
+                >
+                  ألصق النص بالتوقيت
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
               {busy ? (
                 <div className="space-y-4">
                   <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
@@ -153,11 +223,36 @@ function Index() {
                     />
                   </div>
                 </div>
-              ) : (
+              ) : mode === "auto" ? (
                 <div className="space-y-4">
                   <Upload className="mx-auto size-8 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">اختر ملف فيديو (حتى 10 دقائق)</p>
                   <Button onClick={() => inputRef.current?.click()}>اختيار فيديو</Button>
+                </div>
+              ) : (
+                <div className="space-y-4 text-right">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm text-muted-foreground">
+                      {manualFile ? manualFile.name : "لم يتم اختيار فيديو"}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => manualInputRef.current?.click()}>
+                      اختيار فيديو
+                    </Button>
+                  </div>
+                  <Textarea
+                    dir="auto"
+                    rows={10}
+                    value={manualText}
+                    onChange={(e) => setManualText(e.target.value)}
+                    placeholder={"00:00 --> 00:04\nErster Satz hier\n\n00:04 --> 00:08\nZweiter Satz hier"}
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    مدعوم: SRT / VTT أو أسطر مثل «00:12 النص هنا». الترجمة العربية تتولّد تلقائيًا.
+                  </p>
+                  <Button className="w-full" onClick={() => void handleManual()}>
+                    عرض الفيديو بالنص
+                  </Button>
                 </div>
               )}
             </div>
@@ -177,6 +272,18 @@ function Index() {
           if (file) void handleFile(file);
         }}
       />
+      <input
+        ref={manualInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) setManualFile(file);
+        }}
+      />
+
     </main>
   );
 }

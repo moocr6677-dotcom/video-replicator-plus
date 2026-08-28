@@ -38,11 +38,15 @@ type Phase = "idle" | "audio" | "transcribe" | "translate" | "ready";
 
 function Index() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  const [manualText, setManualText] = useState("");
+  const [manualFile, setManualFile] = useState<File | null>(null);
 
   const transcribe = useServerFn(transcribeChunk);
   const translate = useServerFn(translateBatch);
@@ -53,7 +57,45 @@ function Index() {
     setPhase("idle");
     setProgress(0);
     setError(null);
+    setManualFile(null);
+    setManualText("");
   }, []);
+
+  const handleManual = useCallback(async () => {
+    setError(null);
+    if (!manualFile) {
+      setError("اختر ملف الفيديو أولًا.");
+      return;
+    }
+    const parsed = parseTranscript(manualText);
+    if (parsed.length === 0) {
+      setError("لم أتمكن من قراءة التوقيتات. استخدم صيغة SRT أو أسطر مثل: 00:12 النص هنا");
+      return;
+    }
+
+    setVideoFile(manualFile);
+    setSegments(parsed);
+    setPhase("translate");
+    setProgress(0);
+
+    try {
+      const BATCH = 25;
+      for (let i = 0; i < parsed.length; i += BATCH) {
+        const slice = parsed.slice(i, i + BATCH);
+        const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
+        translations.forEach((ar, index) => {
+          const target = parsed[i + index];
+          if (target) target.ar = ar;
+        });
+        setSegments([...parsed]);
+        setProgress(Math.min(1, (i + BATCH) / parsed.length));
+      }
+    } catch {
+      // Translation is optional here — the pasted transcript still plays.
+    }
+    setPhase("ready");
+  }, [manualFile, manualText, translate]);
+
 
   const handleFile = useCallback(
     async (file: File) => {

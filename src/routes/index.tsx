@@ -3,10 +3,13 @@ import { useCallback, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { CaptionPlayer } from "@/components/CaptionPlayer";
 import { extractAudioChunks } from "@/lib/audio";
 import { segmentsFromChunk, type Segment } from "@/lib/captions";
+import { parseTranscript } from "@/lib/parse-transcript";
 import { transcribeChunk, translateBatch } from "@/lib/transcribe.functions";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({

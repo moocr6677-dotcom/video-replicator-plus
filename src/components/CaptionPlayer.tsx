@@ -223,6 +223,34 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
     setRecordProgress(1);
   }, [ensureAudioGraph, recording]);
 
+  const handleDownload = useCallback(async () => {
+    if (recording) return;
+    setExportError(null);
+    if (fastExportSupported()) {
+      setFast(true);
+      setRecording(true);
+      setRecordProgress(0);
+      try {
+        videoRef.current?.pause();
+        const blob = await fastExport(videoFile, segments, setRecordProgress);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "video-with-captions.mp4";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        setRecording(false);
+        return;
+      } catch {
+        setRecording(false);
+        setFast(false);
+        setExportError("التصدير السريع فشل، جارٍ التسجيل بالطريقة العادية…");
+      }
+    }
+    setFast(false);
+    await startRecording();
+  }, [recording, segments, startRecording, videoFile]);
+
   return (
     <div className="mx-auto w-full max-w-[420px] px-3 pb-10">
       {/* Kept in the layout (1px, transparent) instead of display:none — hidden videos
@@ -297,16 +325,20 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
           <Button variant="outline" size="icon" onClick={onReset} disabled={recording} aria-label="فيديو جديد">
             <RotateCcw className="size-4" />
           </Button>
-          <Button onClick={() => void startRecording()} disabled={recording}>
+          <Button onClick={() => void handleDownload()} disabled={recording}>
             <Download className="size-4" />
-            {recording ? `جارٍ التسجيل ${Math.round(recordProgress * 100)}%` : "تحميل الفيديو"}
+            {recording ? `جارٍ التصدير ${Math.round(recordProgress * 100)}%` : "تحميل الفيديو"}
           </Button>
         </div>
       </div>
 
+      {exportError ? <p className="mt-3 text-center text-xs text-destructive">{exportError}</p> : null}
+
       {recording ? (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          سيبه يكمّل للآخر من غير ما تقفل الصفحة — التسجيل بياخد نفس مدة الفيديو.
+          {fast
+            ? "التصدير السريع شغال — أسرع من مدة الفيديو، سيب الصفحة مفتوحة لحد ما يخلص."
+            : "سيبه يكمّل للآخر من غير ما تقفل الصفحة — التسجيل بياخد نفس مدة الفيديو."}
         </p>
       ) : null}
     </div>

@@ -297,16 +297,20 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
           <Button variant="outline" size="icon" onClick={onReset} disabled={recording} aria-label="فيديو جديد">
             <RotateCcw className="size-4" />
           </Button>
-          <Button onClick={() => void startRecording()} disabled={recording}>
+          <Button onClick={() => void handleDownload()} disabled={recording}>
             <Download className="size-4" />
-            {recording ? `جارٍ التسجيل ${Math.round(recordProgress * 100)}%` : "تحميل الفيديو"}
+            {recording ? `جارٍ التصدير ${Math.round(recordProgress * 100)}%` : "تحميل الفيديو"}
           </Button>
         </div>
       </div>
 
+      {exportError ? <p className="mt-3 text-center text-xs text-destructive">{exportError}</p> : null}
+
       {recording ? (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          سيبه يكمّل للآخر من غير ما تقفل الصفحة — التسجيل بياخد نفس مدة الفيديو.
+          {fast
+            ? "التصدير السريع شغال — أسرع من مدة الفيديو، سيب الصفحة مفتوحة لحد ما يخلص."
+            : "سيبه يكمّل للآخر من غير ما تقفل الصفحة — التسجيل بياخد نفس مدة الفيديو."}
         </p>
       ) : null}
     </div>

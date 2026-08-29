@@ -1,4 +1,4 @@
-import { ArrayBufferTarget, Muxer } from "mp4-muxer";
+import { ArrayBufferTarget, Muxer, StreamTarget } from "mp4-muxer";
 import { activeIndexAt, type Segment } from "@/lib/captions";
 import { drawFrame, FRAME_H, FRAME_W, layoutBlocks, scrollTargetFor, type Block } from "@/lib/render-frame";
 
@@ -6,8 +6,27 @@ type VideoFrameCallbackEl = HTMLVideoElement & {
   requestVideoFrameCallback?: (cb: () => void) => number;
 };
 
+type SavePicker = (options: {
+  suggestedName?: string;
+  types?: Array<{ description: string; accept: Record<string, string[]> }>;
+}) => Promise<FileSystemFileHandle>;
+
 export function fastExportSupported(): boolean {
   return typeof window !== "undefined" && "VideoEncoder" in window && "AudioEncoder" in window;
+}
+
+/** Long exports are streamed straight to disk so memory never holds the whole MP4. */
+async function pickSaveHandle(): Promise<FileSystemFileHandle | null> {
+  const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+  if (!picker) return null;
+  try {
+    return await picker({
+      suggestedName: "video-with-captions.mp4",
+      types: [{ description: "MP4", accept: { "video/mp4": [".mp4"] } }],
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function pickVideoCodec(): Promise<string | null> {

@@ -235,7 +235,7 @@ function Index() {
               ) : mode === "auto" ? (
                 <div className="space-y-4">
                   <Upload className="mx-auto size-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">اختر ملف فيديو (حتى 10 دقائق)</p>
+                  <p className="text-sm text-muted-foreground">اختر ملف فيديو (حتى 4 ساعات وأي حجم)</p>
                   <Button onClick={() => inputRef.current?.click()}>اختيار فيديو</Button>
                 </div>
               ) : (

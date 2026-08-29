@@ -233,8 +233,13 @@ export async function fastExport(
     }
 
     muxer.finalize();
+    if (writable) {
+      await writable.close();
+      onProgress(1);
+      return null;
+    }
     onProgress(1);
-    return new Blob([target.buffer], { type: "video/mp4" });
+    return new Blob([bufferTarget!.buffer], { type: "video/mp4" });
   } finally {
     video.removeAttribute("src");
     video.load();

@@ -66,11 +66,14 @@ async function decodeAudio(file: File): Promise<AudioBuffer | null> {
  * Renders the captioned frame offline (faster than real time) with WebCodecs
  * and muxes it into an MP4, so the user does not have to sit through playback.
  */
+export type ExportQuality = "small" | "high";
+
 export async function fastExport(
   file: File,
   segments: Segment[],
   onProgress: (ratio: number) => void,
   speed = 16,
+  quality: ExportQuality = "high",
 ): Promise<Blob | null> {
   const codec = await pickVideoCodec();
   if (!codec) throw new Error("متصفحك لا يدعم التصدير السريع.");
@@ -132,11 +135,13 @@ export async function fastExport(
       output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
       error: (e) => console.error(e),
     });
+    const videoBitrate =
+      quality === "small" ? (long ? 700_000 : 900_000) : long ? 2_200_000 : 5_000_000;
     videoEncoder.configure({
       codec,
       width: FRAME_W,
       height: FRAME_H,
-      bitrate: long ? 2_200_000 : 5_000_000,
+      bitrate: videoBitrate,
       framerate: 30,
     });
 
@@ -201,7 +206,7 @@ export async function fastExport(
         codec: "mp4a.40.2",
         sampleRate: audioBuffer.sampleRate,
         numberOfChannels: channels,
-        bitrate: 128_000,
+        bitrate: quality === "small" ? 64_000 : 128_000,
       });
 
       const CHUNK = 4096;

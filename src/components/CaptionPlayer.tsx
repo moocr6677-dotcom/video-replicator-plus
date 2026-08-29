@@ -62,6 +62,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [fast, setFast] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [smallSize, setSmallSize] = useState(true);
 
   // Some Android file pickers return MP4 files as application/octet-stream (or
   // with an empty type). A blob URL preserves that wrong type and Chrome then
@@ -235,7 +236,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       setRecordProgress(0);
       try {
         videoRef.current?.pause();
-        const blob = await fastExport(videoFile, segments, setRecordProgress);
+        const blob = await fastExport(videoFile, segments, setRecordProgress, 16, smallSize ? "small" : "high");
         if (blob) {
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
@@ -254,7 +255,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
     }
     setFast(false);
     await startRecording();
-  }, [recording, segments, startRecording, videoFile]);
+  }, [recording, segments, startRecording, videoFile, smallSize]);
 
   return (
     <div className="mx-auto w-full max-w-[420px] px-3 pb-10">
@@ -338,6 +339,28 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       </div>
 
       {exportError ? <p className="mt-3 text-center text-xs text-destructive">{exportError}</p> : null}
+
+      <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <span>حجم الملف:</span>
+        <div className="flex overflow-hidden rounded-full border border-border">
+          <button
+            type="button"
+            disabled={recording}
+            onClick={() => setSmallSize(true)}
+            className={`px-3 py-1 transition ${smallSize ? "bg-primary text-primary-foreground" : "bg-transparent"}`}
+          >
+            صغير (أسرع)
+          </button>
+          <button
+            type="button"
+            disabled={recording}
+            onClick={() => setSmallSize(false)}
+            className={`px-3 py-1 transition ${!smallSize ? "bg-primary text-primary-foreground" : "bg-transparent"}`}
+          >
+            جودة عالية
+          </button>
+        </div>
+      </div>
 
       {recording ? (
         <p className="mt-3 text-center text-xs text-muted-foreground">

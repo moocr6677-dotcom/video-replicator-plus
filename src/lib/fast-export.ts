@@ -66,11 +66,14 @@ async function decodeAudio(file: File): Promise<AudioBuffer | null> {
  * Renders the captioned frame offline (faster than real time) with WebCodecs
  * and muxes it into an MP4, so the user does not have to sit through playback.
  */
+export type ExportQuality = "small" | "high";
+
 export async function fastExport(
   file: File,
   segments: Segment[],
   onProgress: (ratio: number) => void,
   speed = 16,
+  quality: ExportQuality = "high",
 ): Promise<Blob | null> {
   const codec = await pickVideoCodec();
   if (!codec) throw new Error("متصفحك لا يدعم التصدير السريع.");

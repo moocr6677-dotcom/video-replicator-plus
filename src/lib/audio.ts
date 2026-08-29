@@ -288,7 +288,7 @@ export async function extractAudioChunks(
     const slice = data.subarray(range.from, range.to);
     if (slice.length < TARGET_RATE * 0.2) continue;
     chunks.push({
-      base64: toBase64(encodeWav(new Float32Array(slice), TARGET_RATE)),
+      encode: () => toBase64(encodeWav(new Float32Array(slice), TARGET_RATE)),
       start: range.from / TARGET_RATE,
       duration: slice.length / TARGET_RATE,
     });

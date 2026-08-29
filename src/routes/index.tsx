@@ -106,7 +106,7 @@ function Index() {
         setPhase("audio");
         const { chunks, duration } = await extractAudioChunks(file, 18, (r) => setProgress(r * 0.2));
         if (duration > MAX_SECONDS) {
-          throw new Error("الفيديو أطول من 10 دقائق. جرّب فيديو أقصر.");
+          throw new Error("الفيديو أطول من 4 ساعات. جرّب فيديو أقصر.");
         }
         if (chunks.length === 0) throw new Error("لم يتم العثور على صوت في هذا الفيديو.");
 
@@ -114,12 +114,12 @@ function Index() {
         const texts = new Array<string>(chunks.length).fill("");
         let done = 0;
         let cursor = 0;
-        const CONCURRENCY = 2;
+        const CONCURRENCY = 6;
         const worker = async () => {
           while (cursor < chunks.length) {
             const index = cursor++;
             const chunk = chunks[index]!;
-            const { text } = await transcribe({ data: { base64: chunk.base64 } });
+            const { text } = await transcribe({ data: { base64: chunk.encode() } });
             texts[index] = text ?? "";
             done += 1;
             setProgress(0.2 + (done / chunks.length) * 0.5);

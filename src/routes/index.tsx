@@ -32,7 +32,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const MAX_SECONDS = 10 * 60;
+const MAX_SECONDS = 4 * 60 * 60;
 
 type Phase = "idle" | "audio" | "transcribe" | "translate" | "ready";
 

@@ -141,16 +141,25 @@ function Index() {
 
         setPhase("translate");
         const BATCH = 25;
-        for (let i = 0; i < collected.length; i += BATCH) {
-          const slice = collected.slice(i, i + BATCH);
-          const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
-          translations.forEach((ar, index) => {
-            const target = collected[i + index];
-            if (target) target.ar = ar;
-          });
-          setSegments([...collected]);
-          setProgress(0.7 + Math.min(1, (i + BATCH) / collected.length) * 0.3);
-        }
+        const starts: number[] = [];
+        for (let i = 0; i < collected.length; i += BATCH) starts.push(i);
+        let translated = 0;
+        let batchCursor = 0;
+        const translateWorker = async () => {
+          while (batchCursor < starts.length) {
+            const start = starts[batchCursor++]!;
+            const slice = collected.slice(start, start + BATCH);
+            const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
+            translations.forEach((ar, index) => {
+              const target = collected[start + index];
+              if (target) target.ar = ar;
+            });
+            translated += 1;
+            setSegments([...collected]);
+            setProgress(0.7 + (translated / starts.length) * 0.3);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, starts.length) }, translateWorker));
 
         setPhase("ready");
       } catch (err) {

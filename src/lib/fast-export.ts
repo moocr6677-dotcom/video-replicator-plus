@@ -108,7 +108,7 @@ export async function fastExport(
     const target = writable
       ? new StreamTarget({
           onData: (data, position) => {
-            void writable.write({ type: "write", position, data });
+            void writable.write({ type: "write", position, data: data.slice().buffer as ArrayBuffer });
           },
         })
       : bufferTarget!;

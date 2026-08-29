@@ -60,6 +60,8 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [fast, setFast] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Some Android file pickers return MP4 files as application/octet-stream (or
   // with an empty type). A blob URL preserves that wrong type and Chrome then

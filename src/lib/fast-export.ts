@@ -70,8 +70,8 @@ export async function fastExport(
   file: File,
   segments: Segment[],
   onProgress: (ratio: number) => void,
-  speed = 6,
-): Promise<Blob> {
+  speed = 16,
+): Promise<Blob | null> {
   const codec = await pickVideoCodec();
   if (!codec) throw new Error("متصفحك لا يدعم التصدير السريع.");
 
@@ -92,6 +92,7 @@ export async function fastExport(
 
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const aspect = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+    const long = duration > 20 * 60;
 
     const canvas = document.createElement("canvas");
     canvas.width = FRAME_W;
@@ -100,10 +101,21 @@ export async function fastExport(
     if (!ctx) throw new Error("تعذّر تجهيز لوحة الرسم.");
     const blocks: Block[] = layoutBlocks(ctx, segments);
 
-    const target = new ArrayBufferTarget();
+    // Long exports stream to a real file; short ones stay in memory as a blob.
+    const handle = long ? await pickSaveHandle() : null;
+    const writable = handle ? await handle.createWritable() : null;
+    const bufferTarget = writable ? null : new ArrayBufferTarget();
+    const target = writable
+      ? new StreamTarget({
+          onData: (data, position) => {
+            void writable.write({ type: "write", position, data });
+          },
+        })
+      : bufferTarget!;
+
     const muxer = new Muxer({
-      target,
-      fastStart: "in-memory",
+      target: target as ArrayBufferTarget,
+      fastStart: writable ? false : "in-memory",
       video: { codec: "avc", width: FRAME_W, height: FRAME_H },
       ...(audioBuffer
         ? {
@@ -124,7 +136,7 @@ export async function fastExport(
       codec,
       width: FRAME_W,
       height: FRAME_H,
-      bitrate: 5_000_000,
+      bitrate: long ? 2_200_000 : 5_000_000,
       framerate: 30,
     });
 

@@ -255,7 +255,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
     }
     setFast(false);
     await startRecording();
-  }, [recording, segments, startRecording, videoFile]);
+  }, [recording, segments, startRecording, videoFile, smallSize]);
 
   return (
     <div className="mx-auto w-full max-w-[420px] px-3 pb-10">
@@ -339,6 +339,28 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       </div>
 
       {exportError ? <p className="mt-3 text-center text-xs text-destructive">{exportError}</p> : null}
+
+      <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <span>حجم الملف:</span>
+        <div className="flex overflow-hidden rounded-full border border-border">
+          <button
+            type="button"
+            disabled={recording}
+            onClick={() => setSmallSize(true)}
+            className={`px-3 py-1 transition ${smallSize ? "bg-primary text-primary-foreground" : "bg-transparent"}`}
+          >
+            صغير (أسرع)
+          </button>
+          <button
+            type="button"
+            disabled={recording}
+            onClick={() => setSmallSize(false)}
+            className={`px-3 py-1 transition ${!smallSize ? "bg-primary text-primary-foreground" : "bg-transparent"}`}
+          >
+            جودة عالية
+          </button>
+        </div>
+      </div>
 
       {recording ? (
         <p className="mt-3 text-center text-xs text-muted-foreground">

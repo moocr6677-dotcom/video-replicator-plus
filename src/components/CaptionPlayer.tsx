@@ -13,6 +13,7 @@ import {
   scrollTargetFor,
   type Block,
 } from "@/lib/render-frame";
+import { fastExport, fastExportSupported } from "@/lib/fast-export";
 
 type Props = {
   videoFile: File;

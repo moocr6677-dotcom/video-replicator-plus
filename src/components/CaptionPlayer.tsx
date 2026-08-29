@@ -236,12 +236,14 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       try {
         videoRef.current?.pause();
         const blob = await fastExport(videoFile, segments, setRecordProgress);
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "video-with-captions.mp4";
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "video-with-captions.mp4";
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+        }
         setRecording(false);
         return;
       } catch {

@@ -1,8 +1,8 @@
 /** Client-side audio extraction: video file -> 16kHz mono WAV chunks. */
 
 export type AudioChunk = {
-  /** Base64-encoded WAV bytes (no data: prefix). */
-  base64: string;
+  /** Encodes the chunk to base64 WAV on demand (keeps long videos out of memory). */
+  encode: () => string;
   /** Start time of the chunk inside the original media, in seconds. */
   start: number;
   /** Duration of the chunk in seconds. */
@@ -288,7 +288,7 @@ export async function extractAudioChunks(
     const slice = data.subarray(range.from, range.to);
     if (slice.length < TARGET_RATE * 0.2) continue;
     chunks.push({
-      base64: toBase64(encodeWav(new Float32Array(slice), TARGET_RATE)),
+      encode: () => toBase64(encodeWav(new Float32Array(slice), TARGET_RATE)),
       start: range.from / TARGET_RATE,
       duration: slice.length / TARGET_RATE,
     });

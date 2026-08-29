@@ -32,7 +32,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const MAX_SECONDS = 10 * 60;
+const MAX_SECONDS = 4 * 60 * 60;
 
 type Phase = "idle" | "audio" | "transcribe" | "translate" | "ready";
 
@@ -106,7 +106,7 @@ function Index() {
         setPhase("audio");
         const { chunks, duration } = await extractAudioChunks(file, 18, (r) => setProgress(r * 0.2));
         if (duration > MAX_SECONDS) {
-          throw new Error("الفيديو أطول من 10 دقائق. جرّب فيديو أقصر.");
+          throw new Error("الفيديو أطول من 4 ساعات. جرّب فيديو أقصر.");
         }
         if (chunks.length === 0) throw new Error("لم يتم العثور على صوت في هذا الفيديو.");
 
@@ -114,12 +114,12 @@ function Index() {
         const texts = new Array<string>(chunks.length).fill("");
         let done = 0;
         let cursor = 0;
-        const CONCURRENCY = 2;
+        const CONCURRENCY = 6;
         const worker = async () => {
           while (cursor < chunks.length) {
             const index = cursor++;
             const chunk = chunks[index]!;
-            const { text } = await transcribe({ data: { base64: chunk.base64 } });
+            const { text } = await transcribe({ data: { base64: chunk.encode() } });
             texts[index] = text ?? "";
             done += 1;
             setProgress(0.2 + (done / chunks.length) * 0.5);
@@ -141,16 +141,25 @@ function Index() {
 
         setPhase("translate");
         const BATCH = 25;
-        for (let i = 0; i < collected.length; i += BATCH) {
-          const slice = collected.slice(i, i + BATCH);
-          const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
-          translations.forEach((ar, index) => {
-            const target = collected[i + index];
-            if (target) target.ar = ar;
-          });
-          setSegments([...collected]);
-          setProgress(0.7 + Math.min(1, (i + BATCH) / collected.length) * 0.3);
-        }
+        const starts: number[] = [];
+        for (let i = 0; i < collected.length; i += BATCH) starts.push(i);
+        let translated = 0;
+        let batchCursor = 0;
+        const translateWorker = async () => {
+          while (batchCursor < starts.length) {
+            const start = starts[batchCursor++]!;
+            const slice = collected.slice(start, start + BATCH);
+            const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
+            translations.forEach((ar, index) => {
+              const target = collected[start + index];
+              if (target) target.ar = ar;
+            });
+            translated += 1;
+            setSegments([...collected]);
+            setProgress(0.7 + (translated / starts.length) * 0.3);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, starts.length) }, translateWorker));
 
         setPhase("ready");
       } catch (err) {
@@ -226,7 +235,7 @@ function Index() {
               ) : mode === "auto" ? (
                 <div className="space-y-4">
                   <Upload className="mx-auto size-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">اختر ملف فيديو (حتى 10 دقائق)</p>
+                  <p className="text-sm text-muted-foreground">اختر ملف فيديو (حتى 4 ساعات وأي حجم)</p>
                   <Button onClick={() => inputRef.current?.click()}>اختيار فيديو</Button>
                 </div>
               ) : (

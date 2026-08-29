@@ -1,4 +1,4 @@
-import { ArrayBufferTarget, Muxer } from "mp4-muxer";
+import { ArrayBufferTarget, Muxer, StreamTarget } from "mp4-muxer";
 import { activeIndexAt, type Segment } from "@/lib/captions";
 import { drawFrame, FRAME_H, FRAME_W, layoutBlocks, scrollTargetFor, type Block } from "@/lib/render-frame";
 
@@ -6,8 +6,27 @@ type VideoFrameCallbackEl = HTMLVideoElement & {
   requestVideoFrameCallback?: (cb: () => void) => number;
 };
 
+type SavePicker = (options: {
+  suggestedName?: string;
+  types?: Array<{ description: string; accept: Record<string, string[]> }>;
+}) => Promise<FileSystemFileHandle>;
+
 export function fastExportSupported(): boolean {
   return typeof window !== "undefined" && "VideoEncoder" in window && "AudioEncoder" in window;
+}
+
+/** Long exports are streamed straight to disk so memory never holds the whole MP4. */
+async function pickSaveHandle(): Promise<FileSystemFileHandle | null> {
+  const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+  if (!picker) return null;
+  try {
+    return await picker({
+      suggestedName: "video-with-captions.mp4",
+      types: [{ description: "MP4", accept: { "video/mp4": [".mp4"] } }],
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function pickVideoCodec(): Promise<string | null> {
@@ -51,8 +70,8 @@ export async function fastExport(
   file: File,
   segments: Segment[],
   onProgress: (ratio: number) => void,
-  speed = 6,
-): Promise<Blob> {
+  speed = 16,
+): Promise<Blob | null> {
   const codec = await pickVideoCodec();
   if (!codec) throw new Error("متصفحك لا يدعم التصدير السريع.");
 
@@ -73,6 +92,7 @@ export async function fastExport(
 
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const aspect = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+    const long = duration > 20 * 60;
 
     const canvas = document.createElement("canvas");
     canvas.width = FRAME_W;
@@ -81,10 +101,21 @@ export async function fastExport(
     if (!ctx) throw new Error("تعذّر تجهيز لوحة الرسم.");
     const blocks: Block[] = layoutBlocks(ctx, segments);
 
-    const target = new ArrayBufferTarget();
+    // Long exports stream to a real file; short ones stay in memory as a blob.
+    const handle = long ? await pickSaveHandle() : null;
+    const writable = handle ? await handle.createWritable() : null;
+    const bufferTarget = writable ? null : new ArrayBufferTarget();
+    const target = writable
+      ? new StreamTarget({
+          onData: (data, position) => {
+            void writable.write({ type: "write", position, data: data.slice().buffer as ArrayBuffer });
+          },
+        })
+      : bufferTarget!;
+
     const muxer = new Muxer({
-      target,
-      fastStart: "in-memory",
+      target: target as ArrayBufferTarget,
+      fastStart: writable ? false : "in-memory",
       video: { codec: "avc", width: FRAME_W, height: FRAME_H },
       ...(audioBuffer
         ? {
@@ -105,7 +136,7 @@ export async function fastExport(
       codec,
       width: FRAME_W,
       height: FRAME_H,
-      bitrate: 5_000_000,
+      bitrate: long ? 2_200_000 : 5_000_000,
       framerate: 30,
     });
 
@@ -202,8 +233,13 @@ export async function fastExport(
     }
 
     muxer.finalize();
+    if (writable) {
+      await writable.close();
+      onProgress(1);
+      return null;
+    }
     onProgress(1);
-    return new Blob([target.buffer], { type: "video/mp4" });
+    return new Blob([bufferTarget!.buffer], { type: "video/mp4" });
   } finally {
     video.removeAttribute("src");
     video.load();

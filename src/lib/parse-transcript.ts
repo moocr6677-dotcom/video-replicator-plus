@@ -15,7 +15,7 @@ function toSeconds(raw: string): number | null {
 const RANGE = /(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?|\d+(?:\.\d+)?)\s*(?:-->|-|–|—|>)\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?|\d+(?:\.\d+)?)/;
 const START_ONLY = /^\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\)?\]?\s*[-–—:]?\s*(.*)$/;
 
-type Raw = { start: number; end: number | null; text: string; ar: string };
+type Raw = { start: number; end: number | null; lines: string[] };
 
 const ARABIC = /[؀-ۿ]/;
 

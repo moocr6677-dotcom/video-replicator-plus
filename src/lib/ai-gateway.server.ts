@@ -13,7 +13,7 @@ function retryDelay(response: Response, attempt: number): number {
     const dateDelay = Date.parse(retryAfter) - Date.now();
     if (Number.isFinite(dateDelay)) return Math.max(1_000, dateDelay);
   }
-  return Math.min(12_000, 1_500 * 2 ** attempt) + Math.floor(Math.random() * 500);
+  return Math.min(10_000, 800 * 2 ** attempt) + Math.floor(Math.random() * 400);
 }
 
 function messageFromBody(body: string): string {

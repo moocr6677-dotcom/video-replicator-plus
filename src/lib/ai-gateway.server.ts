@@ -29,7 +29,8 @@ async function terminalError(response: Response): Promise<never> {
   const body = await response.text().catch(() => "");
   const detail = messageFromBody(body).slice(0, 500);
   if (response.status === 401) throw new Error("إعداد خدمة الذكاء الاصطناعي غير صالح حاليًا.");
-  if (response.status === 402) throw new Error(detail || "رصيد الذكاء الاصطناعي غير كافٍ. أضف رصيدًا من إعدادات مساحة العمل.");
+  if (response.status === 402)
+    throw new Error("رصيد الذكاء الاصطناعي غير كافٍ. أضف رصيدًا من إعدادات مساحة العمل ثم أعد المحاولة.");
   if (response.status === 403) throw new Error(detail || "الذكاء الاصطناعي غير مفعّل لمساحة العمل هذه.");
   if (response.status === 404) throw new Error("خدمة التفريغ الصوتي غير متاحة لمساحة العمل هذه.");
   if (response.status === 429) throw new Error(detail || "الطلبات كثيرة حاليًا. انتظر قليلًا ثم حاول مرة أخرى.");

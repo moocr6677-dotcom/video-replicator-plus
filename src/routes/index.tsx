@@ -75,20 +75,28 @@ function Index() {
 
     setVideoFile(manualFile);
     setSegments(parsed);
+
+    // Segments that already carry an Arabic line (pasted translation) skip AI entirely.
+    const pending = parsed.filter((s) => !s.ar.trim());
+    if (pending.length === 0) {
+      setPhase("ready");
+      return;
+    }
+
     setPhase("translate");
     setProgress(0);
 
     try {
       const BATCH = 25;
-      for (let i = 0; i < parsed.length; i += BATCH) {
-        const slice = parsed.slice(i, i + BATCH);
+      for (let i = 0; i < pending.length; i += BATCH) {
+        const slice = pending.slice(i, i + BATCH);
         const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
         translations.forEach((ar, index) => {
-          const target = parsed[i + index];
+          const target = slice[index];
           if (target) target.ar = ar;
         });
         setSegments([...parsed]);
-        setProgress(Math.min(1, (i + BATCH) / parsed.length));
+        setProgress(Math.min(1, (i + BATCH) / pending.length));
       }
     } catch {
       // Translation is optional here — the pasted transcript still plays.
@@ -258,11 +266,12 @@ function Index() {
                     rows={10}
                     value={manualText}
                     onChange={(e) => setManualText(e.target.value)}
-                    placeholder={"00:00 --> 00:04\nErster Satz hier\n\n00:04 --> 00:08\nZweiter Satz hier"}
+                    placeholder={"00:00 --> 00:04\nErster Satz hier\nالجملة الأولى هنا\n\n00:04 --> 00:08\nZweiter Satz || الجملة الثانية هنا"}
                     className="font-mono text-xs"
                   />
                   <p className="text-xs text-muted-foreground">
-                    مدعوم: SRT / VTT أو أسطر مثل «00:12 النص هنا». الترجمة العربية تتولّد تلقائيًا.
+                    مدعوم: SRT / VTT أو أسطر مثل «00:12 النص هنا». أضف الترجمة الجاهزة في سطر عربي تحت الأصل أو بعد
+                    الفاصل «||» ولن نترجمها تلقائيًا — الأسطر بدون ترجمة تُترجم تلقائيًا.
                   </p>
                   <Button className="w-full" onClick={() => void handleManual()}>
                     عرض الفيديو بالنص

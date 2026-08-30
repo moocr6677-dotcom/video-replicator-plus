@@ -15,7 +15,26 @@ function toSeconds(raw: string): number | null {
 const RANGE = /(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?|\d+(?:\.\d+)?)\s*(?:-->|-|–|—|>)\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?|\d+(?:\.\d+)?)/;
 const START_ONLY = /^\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\)?\]?\s*[-–—:]?\s*(.*)$/;
 
-type Raw = { start: number; end: number | null; text: string };
+type Raw = { start: number; end: number | null; lines: string[] };
+
+const ARABIC = /[؀-ۿ]/;
+
+/** Splits cue lines into original text and a ready-made Arabic translation. */
+function splitBilingual(lines: string[]): { text: string; ar: string } {
+  const original: string[] = [];
+  const arabic: string[] = [];
+  for (const line of lines) {
+    // Explicit separator: "Original || العربية"
+    if (line.includes("||")) {
+      const [a, b] = line.split("||", 2);
+      if (a?.trim()) original.push(a.trim());
+      if (b?.trim()) arabic.push(b.trim());
+      continue;
+    }
+    (ARABIC.test(line) ? arabic : original).push(line);
+  }
+  return { text: original.join(" "), ar: arabic.join(" ") };
+}
 
 /**
  * Parses a pasted transcript. Supports SRT, WebVTT, "00:12 --> 00:15" ranges,
@@ -27,7 +46,7 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
   let pending: Raw | null = null;
 
   const push = () => {
-    if (pending && pending.text.trim()) raws.push({ ...pending, text: pending.text.trim() });
+    if (pending && pending.lines.some((l) => l.trim())) raws.push(pending);
     pending = null;
   };
 
@@ -43,7 +62,7 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
       const end = toSeconds(range[2]!);
       if (start === null) continue;
       const rest = trimmed.slice((range.index ?? 0) + range[0].length).trim();
-      pending = { start, end, text: rest };
+      pending = { start, end, lines: rest ? [rest] : [] };
       continue;
     }
 
@@ -52,11 +71,12 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
       push();
       const start = toSeconds(startOnly[1]!);
       if (start === null) continue;
-      pending = { start, end: null, text: startOnly[2] ?? "" };
+      const rest = (startOnly[2] ?? "").trim();
+      pending = { start, end: null, lines: rest ? [rest] : [] };
       continue;
     }
 
-    if (pending) pending.text += (pending.text ? " " : "") + trimmed;
+    if (pending) pending.lines.push(trimmed);
   }
   push();
 
@@ -65,12 +85,13 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
   return raws.map((raw, index) => {
     const next = raws[index + 1];
     const end = raw.end ?? next?.start ?? Math.max(raw.start + 3, fallbackDuration);
+    const { text, ar } = splitBilingual(raw.lines);
     return {
       id: index,
       start: raw.start,
       end: Math.max(end, raw.start + 0.3),
-      text: raw.text,
-      ar: "",
+      text,
+      ar,
     } satisfies Segment;
   });
 }

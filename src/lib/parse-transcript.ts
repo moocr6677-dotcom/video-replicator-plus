@@ -46,7 +46,7 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
   let pending: Raw | null = null;
 
   const push = () => {
-    if (pending && pending.text.trim()) raws.push({ ...pending, text: pending.text.trim() });
+    if (pending && pending.lines.some((l) => l.trim())) raws.push(pending);
     pending = null;
   };
 
@@ -62,7 +62,7 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
       const end = toSeconds(range[2]!);
       if (start === null) continue;
       const rest = trimmed.slice((range.index ?? 0) + range[0].length).trim();
-      pending = { start, end, text: rest };
+      pending = { start, end, lines: rest ? [rest] : [] };
       continue;
     }
 
@@ -71,11 +71,12 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
       push();
       const start = toSeconds(startOnly[1]!);
       if (start === null) continue;
-      pending = { start, end: null, text: startOnly[2] ?? "" };
+      const rest = (startOnly[2] ?? "").trim();
+      pending = { start, end: null, lines: rest ? [rest] : [] };
       continue;
     }
 
-    if (pending) pending.text += (pending.text ? " " : "") + trimmed;
+    if (pending) pending.lines.push(trimmed);
   }
   push();
 
@@ -84,12 +85,13 @@ export function parseTranscript(input: string, fallbackDuration = 0): Segment[] 
   return raws.map((raw, index) => {
     const next = raws[index + 1];
     const end = raw.end ?? next?.start ?? Math.max(raw.start + 3, fallbackDuration);
+    const { text, ar } = splitBilingual(raw.lines);
     return {
       id: index,
       start: raw.start,
       end: Math.max(end, raw.start + 0.3),
-      text: raw.text,
-      ar: "",
+      text,
+      ar,
     } satisfies Segment;
   });
 }

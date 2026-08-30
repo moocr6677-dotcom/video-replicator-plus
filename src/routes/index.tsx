@@ -111,55 +111,60 @@ function Index() {
         if (chunks.length === 0) throw new Error("لم يتم العثور على صوت في هذا الفيديو.");
 
         setPhase("transcribe");
-        const texts = new Array<string>(chunks.length).fill("");
-        let done = 0;
+        setVideoFile(file);
+
+        // Each chunk keeps its own slot so the final list stays in time order.
+        // A chunk is translated immediately after it is transcribed — translation
+        // overlaps transcription instead of waiting for it to finish.
+        const chunkSegs: Segment[][] = chunks.map(() => []);
+        let totalSegs = 0;
+        let transcribedChunks = 0;
         let cursor = 0;
-        const CONCURRENCY = 6;
+        let failed: Error | null = null;
+
+        const flatten = () => chunkSegs.flat();
+        const BATCH = 40;
+        const TRANSCRIBE_CONCURRENCY = 8;
+
         const worker = async () => {
-          while (cursor < chunks.length) {
+          while (cursor < chunks.length && !failed) {
             const index = cursor++;
             const chunk = chunks[index]!;
-            const { text } = await transcribe({ data: { base64: chunk.encode() } });
-            texts[index] = text ?? "";
-            done += 1;
-            setProgress(0.2 + (done / chunks.length) * 0.5);
+            let segs: Segment[] = [];
+            try {
+              const { text } = await transcribe({ data: { base64: chunk.encode() } });
+              if (text) segs = segmentsFromChunk(text, chunk.start, chunk.duration, totalSegs);
+            } catch (err) {
+              failed = err instanceof Error ? err : new Error("حصل خطأ غير متوقع.");
+            }
+            chunkSegs[index] = segs;
+            totalSegs += segs.length;
+            transcribedChunks += 1;
+            setSegments(flatten());
+            setProgress(0.2 + (transcribedChunks / chunks.length) * 0.5);
+
+            for (let i = 0; i < segs.length; i += BATCH) {
+              const slice = segs.slice(i, i + BATCH);
+              try {
+                const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
+                translations.forEach((ar, j) => {
+                  const target = slice[j];
+                  if (target) target.ar = ar;
+                });
+                setSegments(flatten());
+              } catch {
+                // Translation is best-effort; the original text still plays.
+              }
+              setProgress(0.7 + Math.min(0.3, (transcribedChunks / chunks.length) * 0.3));
+            }
           }
         };
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
+        await Promise.all(Array.from({ length: Math.min(TRANSCRIBE_CONCURRENCY, chunks.length) }, worker));
 
-        const collected: Segment[] = [];
-        for (let i = 0; i < chunks.length; i++) {
-          const chunk = chunks[i]!;
-          const text = texts[i];
-          if (text) collected.push(...segmentsFromChunk(text, chunk.start, chunk.duration, collected.length));
-        }
-
+        if (failed) throw failed;
+        const collected = flatten();
         if (collected.length === 0) throw new Error("تعذّر استخراج النص من هذا الفيديو.");
-
-        setVideoFile(file);
         setSegments(collected);
-
-        setPhase("translate");
-        const BATCH = 25;
-        const starts: number[] = [];
-        for (let i = 0; i < collected.length; i += BATCH) starts.push(i);
-        let translated = 0;
-        let batchCursor = 0;
-        const translateWorker = async () => {
-          while (batchCursor < starts.length) {
-            const start = starts[batchCursor++]!;
-            const slice = collected.slice(start, start + BATCH);
-            const { translations } = await translate({ data: { lines: slice.map((s) => s.text) } });
-            translations.forEach((ar, index) => {
-              const target = collected[start + index];
-              if (target) target.ar = ar;
-            });
-            translated += 1;
-            setSegments([...collected]);
-            setProgress(0.7 + (translated / starts.length) * 0.3);
-          }
-        };
-        await Promise.all(Array.from({ length: Math.min(4, starts.length) }, translateWorker));
 
         setPhase("ready");
       } catch (err) {
@@ -176,7 +181,7 @@ function Index() {
     phase === "audio"
       ? "جارٍ استخراج الصوت…"
       : phase === "transcribe"
-        ? "جارٍ تفريغ النص…"
+        ? "جارٍ التفريغ والترجمة معًا…"
         : phase === "translate"
           ? "جارٍ الترجمة للعربية…"
           : "";

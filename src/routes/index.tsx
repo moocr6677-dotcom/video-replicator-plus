@@ -266,11 +266,12 @@ function Index() {
                     rows={10}
                     value={manualText}
                     onChange={(e) => setManualText(e.target.value)}
-                    placeholder={"00:00 --> 00:04\nErster Satz hier\n\n00:04 --> 00:08\nZweiter Satz hier"}
+                    placeholder={"00:00 --> 00:04\nErster Satz hier\nالجملة الأولى هنا\n\n00:04 --> 00:08\nZweiter Satz || الجملة الثانية هنا"}
                     className="font-mono text-xs"
                   />
                   <p className="text-xs text-muted-foreground">
-                    مدعوم: SRT / VTT أو أسطر مثل «00:12 النص هنا». الترجمة العربية تتولّد تلقائيًا.
+                    مدعوم: SRT / VTT أو أسطر مثل «00:12 النص هنا». أضف الترجمة الجاهزة في سطر عربي تحت الأصل أو بعد
+                    الفاصل «||» ولن نترجمها تلقائيًا — الأسطر بدون ترجمة تُترجم تلقائيًا.
                   </p>
                   <Button className="w-full" onClick={() => void handleManual()}>
                     عرض الفيديو بالنص

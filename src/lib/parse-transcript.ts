@@ -15,7 +15,26 @@ function toSeconds(raw: string): number | null {
 const RANGE = /(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?|\d+(?:\.\d+)?)\s*(?:-->|-|–|—|>)\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?|\d+(?:\.\d+)?)/;
 const START_ONLY = /^\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\)?\]?\s*[-–—:]?\s*(.*)$/;
 
-type Raw = { start: number; end: number | null; text: string };
+type Raw = { start: number; end: number | null; text: string; ar: string };
+
+const ARABIC = /[؀-ۿ]/;
+
+/** Splits cue lines into original text and a ready-made Arabic translation. */
+function splitBilingual(lines: string[]): { text: string; ar: string } {
+  const original: string[] = [];
+  const arabic: string[] = [];
+  for (const line of lines) {
+    // Explicit separator: "Original || العربية"
+    if (line.includes("||")) {
+      const [a, b] = line.split("||", 2);
+      if (a?.trim()) original.push(a.trim());
+      if (b?.trim()) arabic.push(b.trim());
+      continue;
+    }
+    (ARABIC.test(line) ? arabic : original).push(line);
+  }
+  return { text: original.join(" "), ar: arabic.join(" ") };
+}
 
 /**
  * Parses a pasted transcript. Supports SRT, WebVTT, "00:12 --> 00:15" ranges,

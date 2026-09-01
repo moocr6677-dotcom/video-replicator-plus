@@ -163,13 +163,14 @@ export async function fastExport(
     let scroll = 0;
     let frames = 0;
     let lastTs = -1;
+    let baseTs: number | null = null;
     let lastFrameAt = performance.now();
 
     const encodeCurrent = () => {
       const t = video.currentTime;
-      const tsUs = Math.round(t * 1_000_000);
-      if (tsUs <= lastTs) return;
-      lastTs = tsUs;
+      const rawUs = Math.round(t * 1_000_000);
+      if (rawUs <= lastTs) return;
+      lastTs = rawUs;
       lastFrameAt = performance.now();
       const index = activeIndexAt(segments, t);
       const want = scrollTargetFor(blocks, index, aspect);
@@ -178,12 +179,17 @@ export async function fastExport(
       drawFrame(ctx, { video, videoAspect: aspect, blocks, activeIndex: index, scroll });
       // Backpressure: skip drawing new frames while the encoder is saturated.
       if (videoEncoder.encodeQueueSize > 12) return;
+      // The muxer requires the first chunk to start at timestamp 0, so all
+      // timestamps are rebased on the first frame we actually encode.
+      if (baseTs === null) baseTs = rawUs;
+      const tsUs = Math.max(0, rawUs - baseTs);
       const frame = new VideoFrame(canvas, { timestamp: tsUs, duration: 33_333 });
       videoEncoder.encode(frame, { keyFrame: frames % 60 === 0 });
       frame.close();
       frames += 1;
       if (duration) onProgress(Math.min(0.9, (t / duration) * 0.9));
     };
+
 
     video.currentTime = 0;
     try {

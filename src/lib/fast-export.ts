@@ -296,8 +296,11 @@ export async function fastExport(
     onProgress(1);
     return new Blob([bufferTarget!.buffer], { type: "video/mp4" });
   } finally {
+    video.pause();
     video.removeAttribute("src");
     video.load();
+    video.remove();
+
     URL.revokeObjectURL(url);
   }
 }

@@ -86,12 +86,17 @@ export async function fastExport(
   video.muted = true;
   video.playsInline = true;
   video.preload = "auto";
+  // Detached/hidden elements don't decode frames in some browsers, so keep a
+  // 1px transparent element in the page while exporting.
+  video.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none");
+  document.body.appendChild(video);
 
   try {
     await new Promise<void>((resolve, reject) => {
       video.onloadeddata = () => resolve();
       video.onerror = () => reject(new Error("تعذّر قراءة الفيديو للتصدير."));
     });
+
 
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const aspect = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
@@ -131,9 +136,18 @@ export async function fastExport(
         : {}),
     });
 
+    let encoderError: Error | null = null;
     const videoEncoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error: (e) => console.error(e),
+      output: (chunk, meta) => {
+        try {
+          muxer.addVideoChunk(chunk, meta);
+        } catch (e) {
+          encoderError = e instanceof Error ? e : new Error(String(e));
+        }
+      },
+      error: (e) => {
+        encoderError = e instanceof Error ? e : new Error(String(e));
+      },
     });
     const videoBitrate =
       quality === "small" ? (long ? 700_000 : 900_000) : long ? 2_200_000 : 5_000_000;
@@ -149,17 +163,21 @@ export async function fastExport(
     let scroll = 0;
     let frames = 0;
     let lastTs = -1;
+    let lastFrameAt = performance.now();
 
     const encodeCurrent = () => {
       const t = video.currentTime;
       const tsUs = Math.round(t * 1_000_000);
       if (tsUs <= lastTs) return;
       lastTs = tsUs;
+      lastFrameAt = performance.now();
       const index = activeIndexAt(segments, t);
       const want = scrollTargetFor(blocks, index, aspect);
       scroll += (want - scroll) * 0.35;
       if (Math.abs(want - scroll) < 0.5) scroll = want;
       drawFrame(ctx, { video, videoAspect: aspect, blocks, activeIndex: index, scroll });
+      // Backpressure: skip drawing new frames while the encoder is saturated.
+      if (videoEncoder.encodeQueueSize > 12) return;
       const frame = new VideoFrame(canvas, { timestamp: tsUs, duration: 33_333 });
       videoEncoder.encode(frame, { keyFrame: frames % 60 === 0 });
       frame.close();
@@ -167,22 +185,50 @@ export async function fastExport(
       if (duration) onProgress(Math.min(0.9, (t / duration) * 0.9));
     };
 
-    video.playbackRate = speed;
     video.currentTime = 0;
+    try {
+      video.playbackRate = speed;
+    } catch {
+      video.playbackRate = 4;
+    }
     await video.play().catch(() => undefined);
+    if (video.paused) throw new Error("تعذّر تشغيل الفيديو للتصدير السريع.");
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
       let stopped = false;
       const finish = () => {
         if (stopped) return;
         stopped = true;
+        clearInterval(watchdog);
         resolve();
       };
+      const fail = (err: Error) => {
+        if (stopped) return;
+        stopped = true;
+        clearInterval(watchdog);
+        reject(err);
+      };
+      // If decoding stalls for 15s we bail out so the caller can fall back to
+      // the normal (real-time) recording path instead of hanging forever.
+      const watchdog = setInterval(() => {
+        if (encoderError) return fail(encoderError);
+        if (video.ended) return finish();
+        if (performance.now() - lastFrameAt > 15_000) {
+          fail(new Error("توقّف فك ترميز الفيديو أثناء التصدير السريع."));
+        } else if (video.paused) {
+          void video.play().catch(() => undefined);
+        }
+      }, 1000);
+
       video.onended = finish;
       const useRvfc = typeof video.requestVideoFrameCallback === "function";
       const tick = () => {
         if (stopped) return;
-        encodeCurrent();
+        try {
+          encodeCurrent();
+        } catch (e) {
+          return fail(e instanceof Error ? e : new Error(String(e)));
+        }
         if (video.ended) return finish();
         if (useRvfc) video.requestVideoFrameCallback!(tick);
         else requestAnimationFrame(tick);
@@ -190,6 +236,10 @@ export async function fastExport(
       if (useRvfc) video.requestVideoFrameCallback!(tick);
       else requestAnimationFrame(tick);
     });
+
+    if (encoderError) throw encoderError;
+    if (frames === 0) throw new Error("لم يتم التقاط أي إطار أثناء التصدير السريع.");
+
 
     video.pause();
     await videoEncoder.flush();
@@ -246,8 +296,11 @@ export async function fastExport(
     onProgress(1);
     return new Blob([bufferTarget!.buffer], { type: "video/mp4" });
   } finally {
+    video.pause();
     video.removeAttribute("src");
     video.load();
+    video.remove();
+
     URL.revokeObjectURL(url);
   }
 }

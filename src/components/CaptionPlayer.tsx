@@ -247,11 +247,13 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
         }
         setRecording(false);
         return;
-      } catch {
+      } catch (err) {
         setRecording(false);
         setFast(false);
-        setExportError("التصدير السريع فشل، جارٍ التسجيل بالطريقة العادية…");
+        const reason = err instanceof Error ? err.message : "";
+        setExportError(`التصدير السريع فشل${reason ? ` (${reason})` : ""} — جارٍ التسجيل بالطريقة العادية…`);
       }
+
     }
     setFast(false);
     await startRecording();

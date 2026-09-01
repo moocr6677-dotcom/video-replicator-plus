@@ -112,12 +112,23 @@ export async function fastExport(
     // Long exports stream to a real file; short ones stay in memory as a blob.
     const handle = long ? await pickSaveHandle() : null;
     const writable = handle ? await handle.createWritable() : null;
+    let pendingWrite: Promise<void> = Promise.resolve();
+    let writeError: Error | null = null;
     const bufferTarget = writable ? null : new ArrayBufferTarget();
     const target = writable
       ? new StreamTarget({
           onData: (data, position) => {
-            void writable.write({ type: "write", position, data: data.slice().buffer as ArrayBuffer });
+            const chunk = data.slice();
+            pendingWrite = pendingWrite
+              .then(() => writable.write({ type: "write", position, data: chunk }))
+              .catch((error: unknown) => {
+                writeError = error instanceof Error ? error : new Error(String(error));
+              });
           },
+          // Accumulate small muxer writes into larger chunks. This avoids
+          // creating thousands of simultaneous disk writes on long videos.
+          chunked: true,
+          chunkSize: 2 ** 22,
         })
       : bufferTarget!;
 
@@ -254,9 +265,12 @@ export async function fastExport(
     // ---- audio pass
     if (audioBuffer) {
       const channels = Math.min(2, audioBuffer.numberOfChannels);
+      let audioEncoderError: Error | null = null;
       const audioEncoder = new AudioEncoder({
         output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-        error: (e) => console.error(e),
+        error: (e) => {
+          audioEncoderError = e instanceof Error ? e : new Error(String(e));
+        },
       });
       audioEncoder.configure({
         codec: "mp4a.40.2",
@@ -286,15 +300,24 @@ export async function fastExport(
         });
         audioEncoder.encode(audioData);
         audioData.close();
-        if (offset % (CHUNK * 40) === 0) await new Promise((r) => setTimeout(r, 0));
-        onProgress(0.9 + (offset / total) * 0.09);
+        // Do not queue an entire multi-hour audio track in AudioEncoder.
+        // Draining periodically keeps memory stable and prevents a very long
+        // final flush that appeared to users as a permanent stop at 99%.
+        if (audioEncoder.encodeQueueSize > 24) await audioEncoder.flush();
+        if (audioEncoderError) throw audioEncoderError;
+        if (offset % (CHUNK * 40) === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+        onProgress(0.9 + (offset / total) * 0.085);
       }
       await audioEncoder.flush();
+      if (audioEncoderError) throw audioEncoderError;
       audioEncoder.close();
     }
 
+    onProgress(0.99);
     muxer.finalize();
     if (writable) {
+      await pendingWrite;
+      if (writeError) throw writeError;
       await writable.close();
       onProgress(1);
       return null;

@@ -86,12 +86,17 @@ export async function fastExport(
   video.muted = true;
   video.playsInline = true;
   video.preload = "auto";
+  // Detached/hidden elements don't decode frames in some browsers, so keep a
+  // 1px transparent element in the page while exporting.
+  video.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none");
+  document.body.appendChild(video);
 
   try {
     await new Promise<void>((resolve, reject) => {
       video.onloadeddata = () => resolve();
       video.onerror = () => reject(new Error("تعذّر قراءة الفيديو للتصدير."));
     });
+
 
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const aspect = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;

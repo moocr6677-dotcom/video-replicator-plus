@@ -91,7 +91,26 @@ export async function fastExport(
   video.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none");
   document.body.appendChild(video);
 
+  // Keeps the export alive while the user switches away / the screen dims.
+  let wakeLock: { release: () => Promise<void> } | null = null;
+  const requestWakeLock = async () => {
+    try {
+      const nav = navigator as Navigator & {
+        wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+      };
+      wakeLock = (await nav.wakeLock?.request("screen")) ?? null;
+    } catch {
+      wakeLock = null;
+    }
+  };
+  const onVisible = () => {
+    if (!document.hidden) void requestWakeLock();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  await requestWakeLock();
+
   try {
+
     await new Promise<void>((resolve, reject) => {
       video.onloadeddata = () => resolve();
       video.onerror = () => reject(new Error("تعذّر قراءة الفيديو للتصدير."));

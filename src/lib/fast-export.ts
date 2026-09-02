@@ -92,7 +92,7 @@ export async function fastExport(
   document.body.appendChild(video);
 
   // Keeps the export alive while the user switches away / the screen dims.
-  let wakeLock: { release: () => Promise<void> } | null = null;
+  let wakeLock: { release: () => Promise<void> } | null = null as { release: () => Promise<void> } | null;
   const requestWakeLock = async () => {
     try {
       const nav = navigator as Navigator & {

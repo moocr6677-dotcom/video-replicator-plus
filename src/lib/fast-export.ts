@@ -161,14 +161,17 @@ export async function fastExport(
       },
     });
     const videoBitrate =
-      quality === "small" ? (long ? 700_000 : 900_000) : long ? 2_200_000 : 5_000_000;
+      quality === "small" ? (long ? 1_200_000 : 1_800_000) : long ? 8_000_000 : 14_000_000;
     videoEncoder.configure({
       codec,
       width: FRAME_W,
       height: FRAME_H,
       bitrate: videoBitrate,
+      bitrateMode: "variable",
+      latencyMode: "quality",
       framerate: 30,
     });
+
 
     // ---- video pass: play fast, encode each decoded frame with real timestamps
     let scroll = 0;

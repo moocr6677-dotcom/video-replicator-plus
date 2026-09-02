@@ -236,7 +236,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       setRecordProgress(0);
       try {
         videoRef.current?.pause();
-        const blob = await fastExport(videoFile, segments, setRecordProgress, 16, smallSize ? "small" : "high");
+        const blob = await fastExport(videoFile, segments, setRecordProgress, 6, smallSize ? "small" : "high");
         if (blob) {
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
@@ -367,7 +367,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       {recording ? (
         <p className="mt-3 text-center text-xs text-muted-foreground">
           {fast
-            ? "التصدير السريع شغال — أسرع من مدة الفيديو، سيب الصفحة مفتوحة لحد ما يخلص."
+            ? "التصدير شغال في الخلفية — تقدر تبدّل التطبيقات، الشاشة هتفضل صاحية والتصدير مش هيقف."
             : "سيبه يكمّل للآخر من غير ما تقفل الصفحة — التسجيل بياخد نفس مدة الفيديو."}
         </p>
       ) : null}

@@ -178,7 +178,9 @@ export async function fastExport(
     let frames = 0;
     let lastTs = -1;
     let baseTs: number | null = null;
+    let lastEncodedTs = -1;
     let lastFrameAt = performance.now();
+    let throttled = false;
 
     const encodeCurrent = () => {
       const t = video.currentTime;
@@ -191,13 +193,27 @@ export async function fastExport(
       scroll += (want - scroll) * 0.35;
       if (Math.abs(want - scroll) < 0.5) scroll = want;
       drawFrame(ctx, { video, videoAspect: aspect, blocks, activeIndex: index, scroll });
-      // Backpressure: skip drawing new frames while the encoder is saturated.
-      if (videoEncoder.encodeQueueSize > 12) return;
+
+      // Backpressure: slow the source down instead of dropping frames. Dropping
+      // frames is what made motion look choppy in the exported file.
+      const queue = videoEncoder.encodeQueueSize;
+      if (!throttled && queue > 10) {
+        throttled = true;
+        video.pause();
+      } else if (throttled && queue < 4) {
+        throttled = false;
+        void video.play().catch(() => undefined);
+      }
+
       // The muxer requires the first chunk to start at timestamp 0, so all
       // timestamps are rebased on the first frame we actually encode.
       if (baseTs === null) baseTs = rawUs;
       const tsUs = Math.max(0, rawUs - baseTs);
-      const frame = new VideoFrame(canvas, { timestamp: tsUs, duration: 33_333 });
+      // Real gap between frames keeps playback speed identical to the source
+      // (variable frame rate) so picture and audio stay locked together.
+      const gap = lastEncodedTs < 0 ? 33_333 : Math.min(200_000, Math.max(8_000, tsUs - lastEncodedTs));
+      lastEncodedTs = tsUs;
+      const frame = new VideoFrame(canvas, { timestamp: tsUs, duration: gap });
       videoEncoder.encode(frame, { keyFrame: frames % 60 === 0 });
       frame.close();
       frames += 1;
@@ -228,14 +244,14 @@ export async function fastExport(
         clearInterval(watchdog);
         reject(err);
       };
-      // If decoding stalls for 15s we bail out so the caller can fall back to
+      // If decoding stalls for 30s we bail out so the caller can fall back to
       // the normal (real-time) recording path instead of hanging forever.
       const watchdog = setInterval(() => {
         if (encoderError) return fail(encoderError);
         if (video.ended) return finish();
-        if (performance.now() - lastFrameAt > 15_000) {
+        if (performance.now() - lastFrameAt > 30_000) {
           fail(new Error("توقّف فك ترميز الفيديو أثناء التصدير السريع."));
-        } else if (video.paused) {
+        } else if (video.paused && !throttled) {
           void video.play().catch(() => undefined);
         }
       }, 1000);
@@ -250,12 +266,15 @@ export async function fastExport(
           return fail(e instanceof Error ? e : new Error(String(e)));
         }
         if (video.ended) return finish();
-        if (useRvfc) video.requestVideoFrameCallback!(tick);
+        // rAF/rVFC are frozen while the tab is hidden, so a timer keeps the
+        // export running in the background instead of pausing.
+        if (document.hidden) setTimeout(tick, 0);
+        else if (useRvfc) video.requestVideoFrameCallback!(tick);
         else requestAnimationFrame(tick);
       };
-      if (useRvfc) video.requestVideoFrameCallback!(tick);
-      else requestAnimationFrame(tick);
+      tick();
     });
+
 
     if (encoderError) throw encoderError;
     if (frames === 0) throw new Error("لم يتم التقاط أي إطار أثناء التصدير السريع.");

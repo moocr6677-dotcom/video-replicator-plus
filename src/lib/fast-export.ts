@@ -279,7 +279,7 @@ export async function fastExport(
         codec: "mp4a.40.2",
         sampleRate: audioBuffer.sampleRate,
         numberOfChannels: channels,
-        bitrate: quality === "small" ? 64_000 : 128_000,
+        bitrate: quality === "small" ? 96_000 : 192_000,
       });
 
       const CHUNK = 4096;

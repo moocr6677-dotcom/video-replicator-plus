@@ -367,7 +367,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       {recording ? (
         <p className="mt-3 text-center text-xs text-muted-foreground">
           {fast
-            ? "التصدير السريع شغال — أسرع من مدة الفيديو، سيب الصفحة مفتوحة لحد ما يخلص."
+            ? "التصدير شغال في الخلفية — تقدر تبدّل التطبيقات، الشاشة هتفضل صاحية والتصدير مش هيقف."
             : "سيبه يكمّل للآخر من غير ما تقفل الصفحة — التسجيل بياخد نفس مدة الفيديو."}
         </p>
       ) : null}

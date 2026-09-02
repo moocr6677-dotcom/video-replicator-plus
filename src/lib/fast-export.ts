@@ -366,6 +366,8 @@ export async function fastExport(
     onProgress(1);
     return new Blob([bufferTarget!.buffer], { type: "video/mp4" });
   } finally {
+    document.removeEventListener("visibilitychange", onVisible);
+    void wakeLock?.release().catch(() => undefined);
     video.pause();
     video.removeAttribute("src");
     video.load();

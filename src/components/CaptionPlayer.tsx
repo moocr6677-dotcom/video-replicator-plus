@@ -227,6 +227,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
 
     setRecording(true);
     setRecordProgress(0);
+    startedAt = performance.now();
     recorder.start(1000);
     await video.play();
 

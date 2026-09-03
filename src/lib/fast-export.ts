@@ -63,6 +63,54 @@ async function decodeAudio(file: File): Promise<AudioBuffer | null> {
 }
 
 /**
+ * Silent looping audio + media session. Chrome/Android only keeps a hidden page
+ * running at full speed while it is playing media, so this prevents the export
+ * from freezing when the user leaves the app or locks the screen.
+ */
+function startKeepAlive(): () => void {
+  try {
+    const Ctor: typeof AudioContext =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctor();
+    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const dest = ctx.createMediaStreamDestination();
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    source.connect(gain);
+    gain.connect(dest);
+    source.start();
+
+    const el = document.createElement("audio");
+    el.srcObject = dest.stream;
+    el.loop = true;
+    el.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0");
+    document.body.appendChild(el);
+    void el.play().catch(() => undefined);
+    void ctx.resume().catch(() => undefined);
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+
+    return () => {
+      try {
+        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+        el.pause();
+        el.srcObject = null;
+        el.remove();
+        source.stop();
+        void ctx.close();
+      } catch {
+        // ignore
+      }
+    };
+  } catch {
+    return () => undefined;
+  }
+}
+
+/**
  * Renders the captioned frame offline (faster than real time) with WebCodecs
  * and muxes it into an MP4, so the user does not have to sit through playback.
  */

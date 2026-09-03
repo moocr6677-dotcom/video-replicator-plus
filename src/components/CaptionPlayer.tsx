@@ -284,7 +284,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
         playsInline
         preload="auto"
         controls={false}
-        className="pointer-events-none absolute h-px w-px opacity-0"
+        className="pointer-events-none absolute h-px w-px opacity-[0.01]"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => {

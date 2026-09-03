@@ -109,6 +109,12 @@ export async function fastExport(
   document.addEventListener("visibilitychange", onVisible);
   await requestWakeLock();
 
+  // Mobile browsers freeze a backgrounded page unless it is an active media
+  // session. A silent looping audio track keeps the page running when the user
+  // leaves the app or the screen turns off.
+  const keepAlive = startKeepAlive();
+
+
   try {
 
     await new Promise<void>((resolve, reject) => {

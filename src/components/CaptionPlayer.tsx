@@ -187,16 +187,30 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       if (event.data.size > 0) parts.push(event.data);
     };
 
+    let startedAt = 0;
     const finished = new Promise<void>((resolve) => {
       recorder.onstop = () => {
-        const blob = new Blob(parts, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `video-with-captions.${mimeType.includes("mp4") ? "mp4" : "webm"}`;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-        resolve();
+        void (async () => {
+          let blob = new Blob(parts, { type: mimeType });
+          // MediaRecorder writes WebM without a Duration element, so players
+          // report 0:00 and can't seek. Patch the real duration into the header.
+          if (mimeType.includes("webm")) {
+            const elapsed = Math.max(1, Math.round(performance.now() - startedAt));
+            try {
+              const { default: fixWebmDuration } = await import("fix-webm-duration");
+              blob = await fixWebmDuration(blob, elapsed, { logger: false });
+            } catch {
+              /* keep the raw blob */
+            }
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `video-with-captions.${mimeType.includes("mp4") ? "mp4" : "webm"}`;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          resolve();
+        })();
       };
     });
 
@@ -213,6 +227,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
 
     setRecording(true);
     setRecordProgress(0);
+    startedAt = performance.now();
     recorder.start(1000);
     await video.play();
 
@@ -269,7 +284,7 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
         playsInline
         preload="auto"
         controls={false}
-        className="pointer-events-none absolute h-px w-px opacity-0"
+        className="pointer-events-none absolute h-px w-px opacity-[0.01]"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => {

@@ -251,7 +251,13 @@ export function CaptionPlayer({ videoFile, segments, onReset }: Props) {
       setRecordProgress(0);
       try {
         videoRef.current?.pause();
-        const blob = await fastExport(videoFile, segments, setRecordProgress, 6, smallSize ? "small" : "high");
+        const blob = await fastExport(
+          videoFile,
+          segments,
+          setRecordProgress,
+          smallSize ? 12 : 8,
+          smallSize ? "small" : "high",
+        );
         if (blob) {
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");

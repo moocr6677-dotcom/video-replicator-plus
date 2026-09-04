@@ -374,10 +374,11 @@ export async function fastExport(
         bitrate: quality === "small" ? 96_000 : 192_000,
       });
 
-      const CHUNK = 4096;
+      const CHUNK = 8192;
       const total = audioBuffer.length;
       const left = audioBuffer.getChannelData(0);
       const right = channels > 1 ? audioBuffer.getChannelData(1) : null;
+      let chunkIndex = 0;
       for (let offset = 0; offset < total; offset += CHUNK) {
         const size = Math.min(CHUNK, total - offset);
         const data = new Float32Array(size * channels);
@@ -398,9 +399,10 @@ export async function fastExport(
         // Do not queue an entire multi-hour audio track in AudioEncoder.
         // Draining periodically keeps memory stable and prevents a very long
         // final flush that appeared to users as a permanent stop at 99%.
-        if (audioEncoder.encodeQueueSize > 24) await audioEncoder.flush();
+        if (audioEncoder.encodeQueueSize > 48) await audioEncoder.flush();
         if (audioEncoderError) throw audioEncoderError;
-        if (offset % (CHUNK * 40) === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+        chunkIndex += 1;
+        if (chunkIndex % 40 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
         onProgress(0.9 + (offset / total) * 0.085);
       }
       await audioEncoder.flush();
